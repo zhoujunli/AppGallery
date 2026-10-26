@@ -1,0 +1,560 @@
+/* ===== AppGallery 设计系统 =====
+   这是唯一放色值的地方。assets/style.css 与 assets/skin.css 里不得出现
+   字面色值（skin.css 只允许引用这里的变量），自检：
+     grep -nE '#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\(' assets/style.css assets/skin.css
+   应当无输出。
+
+   两条正交的轴：
+     data-skin  = brutal | glass      版式与材质
+     data-theme = light | dark        system 只解析成这两者之一
+   所以是 2 × 2 四套视觉，不是五套。
+
+   --accent / --glow-1 / --glow-2 / --nav-bg 是「品牌可覆盖」的那一组：
+   projects/ 下的落地页在自己的 <style> 里按项目品牌重写它们，其余令牌继承。
+   站点页（首页、详情、404）用的是 --ui-accent / --ui-glow-*，不和品牌色打架。
+
+   color-scheme 必须写 only light / only dark：安卓部分浏览器看到普通的 light
+   会强行把页面暗化，而我们的深色是 CSS 自己画的，不能被接管。 */
+
+:root {
+  /* 默认 = 玻璃 · 浅色。没有 JS 时也停在这套，和静态 meta 的 only light 对齐 */
+  color-scheme: only light;
+
+  --bg: #f7f5fc;
+  --bg-soft: rgba(255, 255, 255, .42);
+  --bg-card: rgba(255, 255, 255, .55);
+  --line: rgba(84, 70, 130, .16);
+  --line-soft: rgba(84, 70, 130, .10);
+
+  --fg: #241f33;
+  --fg-dim: #6f6884;
+  --fg-faint: #6b6380;
+
+  /* 品牌可覆盖组：主题级默认值 */
+  --accent: #6d5bd0;
+  /* 小字（眉标、行内代码）用的强调色。默认跟 --accent 走；某个品牌色在
+     浅底上压不住 4.5:1 时，由那一页自己再调深一档。 */
+  --accent-text: var(--accent);
+  --accent-dim: #c9c0f0;
+  --accent-bg: rgba(109, 91, 208, .10);
+  --glow-1: rgba(255, 205, 180, .75);
+  --glow-2: rgba(206, 190, 255, .80);
+  --nav-bg: rgba(255, 255, 255, .55);
+
+  --blue: #2563eb;
+  --amber: #b45309;
+  --purple: #7c3aed;
+  --red: #b4442f;
+  --ok: #1f7a68;
+
+  --brand-a: #8f7bf0;
+  --brand-b: #59c9b8;
+
+  --icon-bg: rgba(255, 255, 255, .72);
+  --shadow: 0 18px 38px -28px rgba(15, 23, 42, .22);
+
+  --on-accent: #ffffff;
+  --on-yellow: #141414;
+  --on-project: #ffffff;
+
+  /* 用于站点页的皮肤强调色，不和落地页的品牌 --accent 混用 */
+  --ui-accent: #6d5bd0;
+  --ui-accent-2: #2aa5a0;
+  --ui-accent-bg: rgba(109, 91, 208, .10);
+  --ui-glow-1: rgba(255, 205, 180, .75);
+  --ui-glow-2: rgba(206, 190, 255, .80);
+  --ui-glow-3: rgba(180, 242, 226, .80);
+  --ui-glow-4: rgba(190, 220, 255, .80);
+
+  --body-bg: linear-gradient(180deg, #f7f5fc, #f2f4fb 50%, #f8f3ee);
+
+  /* 皮肤材质 */
+  --ink: #241f33;
+  --muted: #6f6884;
+  --soft: #6b6380;
+  --paper: #ffffff;
+  --thumb-bg: rgba(255, 255, 255, .72);
+  --thumb-border: rgba(255, 255, 255, .95);
+  --chip-bg: rgba(255, 255, 255, .60);
+  --chip-border: rgba(255, 255, 255, .90);
+  --nav-link-bg: rgba(255, 255, 255, .42);
+  --glass: rgba(255, 255, 255, .55);
+  --glass-strong: rgba(255, 255, 255, .72);
+  --glass-line: rgba(255, 255, 255, .85);
+  --pill-bg: rgba(255, 255, 255, .42);
+  --pill-strong: rgba(255, 255, 255, .72);
+
+  --yellow: #ffd23f;
+  --mint: #b8f0c9;
+  --red-brutal: #a83a26;
+  --ok-brutal: #17663f;
+  --brand-bg: #141414;
+  --brand-fg: #ffd23f;
+  --brand-fg-2: #ffffff;
+
+  --shadow-sm: 3px 3px 0 rgba(20, 20, 20, .16);
+  --shadow-card: 0 30px 60px -44px rgba(60, 45, 110, .55), inset 0 1px 0 rgba(255, 255, 255, .7);
+  --shadow-card-hover: 0 40px 70px -40px rgba(60, 45, 110, .55), inset 0 1px 0 rgba(255, 255, 255, .85);
+  --shadow-pill: 0 16px 40px -30px rgba(60, 45, 110, .5);
+  --shadow-stat: 0 12px 30px -26px rgba(60, 45, 110, .55);
+  --icon-shadow: 0 12px 24px -14px rgba(36, 31, 51, .35);
+  --thumb-shadow: inset 0 1px 0 rgba(255, 255, 255, .9), 0 18px 34px -30px rgba(60, 45, 110, .5);
+  --badge-glow: rgba(42, 165, 160, .16);
+  --link-hover-bg: rgba(255, 255, 255, .7);
+
+  --pv-fg: #3f3a4e;
+  --pv-faint: #6b6380;
+  --pv-line: rgba(84, 70, 130, .12);
+  --pv-strong: #241f33;
+  --pv-accent: #6d5bd0;
+  --pv-ok: #1f7a68;
+  --pv-red: #b4442f;
+  --pv-amber: #b45309;
+
+  --focus: #4f3bb8;
+  --dot-halo: rgba(36, 31, 51, .12);
+
+  --card-spot: rgba(109, 91, 208, .06);
+  --stage-sheen: rgba(15, 23, 42, .035);
+  --card-shadow: 0 30px 60px -44px rgba(60, 45, 110, .55);
+  --card-border-hover: rgba(84, 70, 130, .28);
+
+  --notice-bg: #fffbeb;
+  --notice-border: #fde68a;
+  --notice-fg: #92670f;
+
+  /* 动效与层次 */
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-soft: cubic-bezier(.2, .7, .3, 1);
+
+  /* 字体栈 */
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+          "Microsoft YaHei", system-ui, sans-serif;
+
+  --radius: 22px;
+  --maxw: 1080px;
+
+  /* 卡片预览里后台表格状态列的宽度。必须是固定值：表头和每个数据行是
+     各自独立的 grid，用 auto 的话两边会按各自的内容算出不同宽度。 */
+  --pv-status-w: 52px;
+}
+
+/* 品牌可覆盖组：主题级深色默认。落地页各自的 :root 会盖掉它。 */
+[data-theme="dark"] {
+  --accent: #c3b8ff;
+  --accent-dim: #3d3560;
+  --accent-bg: rgba(195, 184, 255, .10);
+  --glow-1: rgba(109, 70, 255, .30);
+  --glow-2: rgba(214, 76, 234, .20);
+  --nav-bg: rgba(11, 9, 18, .55);
+}
+
+/* 粗野的强调色。落地页的 :root 在同特异性下更晚加载，品牌色仍然赢；
+   站点页不用 --accent，用 --ui-accent。 */
+[data-skin="brutal"] {
+  --accent: #ffd23f;
+  --accent-dim: #6a5525;
+  --accent-bg: #1a1710;
+
+  /* 03 的终端预览在浅色、深色下都是同一块黑底 —— 它模拟的是一个真实的
+     终端窗口，不该跟着网页主题翻。深色主题的卡片里如果也用深灰，反而糊成一片。 */
+  --terminal-bg: #141414;
+  --terminal-fg: #efe7d2;
+  --terminal-faint: #a69f8d;
+  --terminal-line: #4a453b;
+  --terminal-accent: #ffd23f;
+  --terminal-ok: #b8f0c9;
+  --terminal-red: #ff7b72;
+
+  /* 应用图标外面那圈白卡纸。两套明暗都是白的。 */
+  --icon-frame: #ffffff;
+}
+
+/* ========== 08 玻璃 · 深色 ========== */
+[data-skin="glass"][data-theme="dark"] {
+  color-scheme: only dark;
+
+  --bg: #0b0912;
+  --bg-soft: rgba(255, 255, 255, .04);
+  --bg-card: rgba(255, 255, 255, .06);
+  --line: rgba(255, 255, 255, .16);
+  --line-soft: rgba(255, 255, 255, .10);
+
+  --fg: #eeeaf7;
+  --fg-dim: #b6aecb;
+  --fg-faint: #a79fbd;
+
+  --blue: #7cc4ff;
+  --amber: #f0b46a;
+  --purple: #b39dff;
+  --red: #ff7b72;
+  --ok: #6ee7b7;
+
+  --brand-a: #a99cff;
+  --brand-b: #5eead4;
+
+  --icon-bg: rgba(255, 255, 255, .06);
+  --shadow: none;
+
+  --ui-accent: #c3b8ff;
+  --ui-accent-2: #5eead4;
+  --ui-accent-bg: rgba(195, 184, 255, .10);
+  --ui-glow-1: rgba(109, 70, 255, .30);
+  --ui-glow-2: rgba(214, 76, 234, .20);
+  --ui-glow-3: rgba(38, 196, 184, .16);
+  --ui-glow-4: rgba(255, 150, 120, .10);
+
+  --body-bg: linear-gradient(180deg, #0a0812, #0d0a17 50%, #0b0910);
+
+  --ink: #eeeaf7;
+  --muted: #b6aecb;
+  --soft: #a79fbd;
+  --paper: #0b0912;
+  --thumb-bg: rgba(8, 6, 16, .45);
+  --thumb-border: rgba(255, 255, 255, .12);
+  --chip-bg: rgba(255, 255, 255, .06);
+  --chip-border: rgba(255, 255, 255, .14);
+  --nav-link-bg: rgba(255, 255, 255, .05);
+  --glass: rgba(255, 255, 255, .06);
+  --glass-strong: rgba(255, 255, 255, .10);
+  --glass-line: rgba(255, 255, 255, .12);
+  --pill-bg: rgba(255, 255, 255, .05);
+  --pill-strong: rgba(255, 255, 255, .10);
+
+  --shadow-sm: 3px 3px 0 rgba(0, 0, 0, .35);
+  --shadow-card: 0 40px 80px -36px rgba(0, 0, 0, .9), inset 0 1px 0 rgba(255, 255, 255, .12);
+  --shadow-card-hover: 0 50px 90px -36px rgba(0, 0, 0, .95), inset 0 1px 0 rgba(255, 255, 255, .18);
+  --shadow-pill: 0 18px 44px -26px rgba(0, 0, 0, .8);
+  --shadow-stat: 0 14px 34px -24px rgba(0, 0, 0, .8);
+  --icon-shadow: 0 12px 28px -14px rgba(0, 0, 0, .8);
+  --thumb-shadow: inset 0 1px 0 rgba(255, 255, 255, .14), 0 20px 40px -30px rgba(0, 0, 0, .9);
+  --badge-glow: rgba(94, 234, 212, .18);
+  --link-hover-bg: rgba(255, 255, 255, .12);
+
+  --pv-fg: #d8d2e6;
+  --pv-faint: #a79fbd;
+  --pv-line: rgba(255, 255, 255, .10);
+  --pv-strong: #eeeaf7;
+  --pv-accent: #c3b8ff;
+  --pv-ok: #6ee7b7;
+  --pv-red: #ff7b72;
+  --pv-amber: #f0b46a;
+
+  --focus: #c3b8ff;
+  --dot-halo: rgba(238, 234, 247, .14);
+
+  --card-spot: rgba(255, 255, 255, .055);
+  --stage-sheen: rgba(255, 255, 255, .075);
+  --card-shadow: 0 40px 80px -36px rgba(0, 0, 0, .9);
+  --card-border-hover: rgba(255, 255, 255, .28);
+
+  --notice-bg: rgba(245, 158, 11, .10);
+  --notice-border: rgba(245, 158, 11, .22);
+  --notice-fg: #d6bc8a;
+}
+
+/* ========== 03 粗野 · 浅色 ========== */
+[data-skin="brutal"][data-theme="light"] {
+  color-scheme: only light;
+
+  --bg: #f6efdd;
+  --bg-soft: #efe7d2;
+  --bg-card: #fffdf6;
+  --line: #141414;
+  --line-soft: #d8d2c2;
+
+  --fg: #141414;
+  --fg-dim: #5f5849;
+  --fg-faint: #6b6252;
+
+  --blue: #1f4bd8;
+  --amber: #8f5300;
+  --purple: #5b3fb0;
+  --red: #a83a26;
+  --ok: #17663f;
+
+  --brand-a: #141414;
+  --brand-b: #ffd23f;
+
+  --icon-bg: #ffffff;
+  --shadow: 6px 6px 0 #141414;
+
+  --on-accent: #141414;
+
+  --ui-accent: #141414;
+  --ui-accent-2: #17663f;
+  --ui-accent-bg: #fffdf6;
+  --ui-glow-1: transparent;
+  --ui-glow-2: transparent;
+  --ui-glow-3: transparent;
+  --ui-glow-4: transparent;
+
+  --body-bg: #f6efdd;
+
+  --ink: #141414;
+  --muted: #5f5849;
+  --soft: #6b6252;
+  --paper: #fffdf6;
+  --thumb-bg: #ffffff;
+  --thumb-border: #141414;
+  --chip-bg: #ffffff;
+  --chip-border: #141414;
+  --nav-link-bg: #ffffff;
+  --glass: #fffdf6;
+  --glass-strong: #fffdf6;
+  --glass-line: #141414;
+  --pill-bg: #ffffff;
+  --pill-strong: #ffd23f;
+
+  --yellow: #ffd23f;
+  --mint: #b8f0c9;
+  --red-brutal: #a83a26;
+  --ok-brutal: #17663f;
+  --brand-bg: #141414;
+  --brand-fg: #ffd23f;
+  --brand-fg-2: #ffffff;
+
+  --shadow-sm: 3px 3px 0 #141414;
+  --shadow-card: 6px 6px 0 #141414;
+  --shadow-card-hover: 10px 10px 0 #141414;
+  --shadow-pill: 3px 3px 0 #141414;
+  --shadow-stat: 3px 3px 0 #141414;
+  --icon-shadow: none;
+  --thumb-shadow: 3px 3px 0 #141414;
+  --badge-glow: transparent;
+  --link-hover-bg: #ffd23f;
+
+  --pv-fg: #141414;
+  --pv-faint: #6b6252;
+  --pv-line: #d8d2c2;
+  --pv-strong: #141414;
+  --pv-accent: #a83a26;
+  --pv-ok: #17663f;
+  --pv-red: #a83a26;
+  --pv-amber: #8f5300;
+
+  --focus: #1f4bd8;
+  --dot-halo: rgba(20, 20, 20, .12);
+
+  --card-spot: transparent;
+  --stage-sheen: transparent;
+  --card-shadow: 6px 6px 0 #141414;
+  --card-border-hover: #141414;
+
+  --notice-bg: #fff3c4;
+  --notice-border: #141414;
+  --notice-fg: #5f4300;
+
+  --radius: 0px;
+  --maxw: 1100px;
+}
+
+/* ========== 03 粗野 · 深色 ========== */
+[data-skin="brutal"][data-theme="dark"] {
+  color-scheme: only dark;
+
+  --bg: #141412;
+  --bg-soft: #26241e;
+  --bg-card: #1e1d19;
+  --line: #f2e9d8;
+  --line-soft: #454138;
+
+  --fg: #f2e9d8;
+  --fg-dim: #b7ad99;
+  --fg-faint: #9b927f;
+
+  --blue: #8ab4ff;
+  --amber: #ffd23f;
+  --purple: #c7b6ff;
+  --red: #ff7b72;
+  --ok: #6ee7b7;
+
+  --brand-a: #ffd23f;
+  --brand-b: #b8f0c9;
+
+  --icon-bg: #26241e;
+  --shadow: 6px 6px 0 #3b382e;
+
+  --on-accent: #141414;
+
+  --ui-accent: #ffd23f;
+  --ui-accent-2: #6ee7b7;
+  --ui-accent-bg: #1e1d19;
+  --ui-glow-1: transparent;
+  --ui-glow-2: transparent;
+  --ui-glow-3: transparent;
+  --ui-glow-4: transparent;
+
+  --body-bg: #141412;
+
+  --ink: #f2e9d8;
+  --muted: #b7ad99;
+  --soft: #9b927f;
+  --paper: #1e1d19;
+  --thumb-bg: #26241e;
+  --thumb-border: #f2e9d8;
+  --chip-bg: #26241e;
+  --chip-border: #f2e9d8;
+  --nav-link-bg: #26241e;
+  --glass: #1e1d19;
+  --glass-strong: #1e1d19;
+  --glass-line: #f2e9d8;
+  --pill-bg: #26241e;
+  --pill-strong: #ffd23f;
+
+  --yellow: #ffd23f;
+  --mint: #b8f0c9;
+  --red-brutal: #ff7b72;
+  --ok-brutal: #6ee7b7;
+  --brand-bg: #ffd23f;
+  --brand-fg: #141414;
+  --brand-fg-2: #141414;
+
+  --shadow-sm: 3px 3px 0 #3b382e;
+  --shadow-card: 6px 6px 0 #3b382e;
+  --shadow-card-hover: 10px 10px 0 #ffd23f;
+  --shadow-pill: 3px 3px 0 #3b382e;
+  --shadow-stat: 3px 3px 0 #3b382e;
+  --icon-shadow: none;
+  --thumb-shadow: 3px 3px 0 #3b382e;
+  --badge-glow: transparent;
+  --link-hover-bg: #ffd23f;
+
+  --pv-fg: #f2e9d8;
+  --pv-faint: #9b927f;
+  --pv-line: #454138;
+  --pv-strong: #f2e9d8;
+  --pv-accent: #ffd23f;
+  --pv-ok: #6ee7b7;
+  --pv-red: #ff7b72;
+  --pv-amber: #ffd23f;
+
+  --focus: #ffd23f;
+  --dot-halo: rgba(242, 233, 216, .14);
+
+  --card-spot: transparent;
+  --stage-sheen: transparent;
+  --card-shadow: 6px 6px 0 #3b382e;
+  --card-border-hover: #ffd23f;
+
+  --notice-bg: rgba(255, 210, 63, .10);
+  --notice-border: #ffd23f;
+  --notice-fg: #ffd23f;
+
+  --radius: 0px;
+  --maxw: 1100px;
+}
+
+/* ===== 深色岛 =====
+   页面里那些「模拟一个真实 app」的插图 —— 手机截图、后台控制台 —— 本身有固定
+   的深浅。它们不该跟着网页主题翻，也不该跟着皮肤翻。
+
+   这个类把令牌在它内部钉回深色，整块插图就稳定了。加在插图的根元素上。
+   品牌令牌（--accent 那几个）由各页面自己再钉一次 —— 各家的品牌色不一样。 */
+.ui-dark {
+  color-scheme: dark;
+  --bg: #0b0d10;
+  --bg-soft: #111419;
+  --bg-card: #14181e;
+  --line: #232a33;
+  --line-soft: #1b2128;
+  --fg: #e6edf3;
+  --fg-dim: #9aa7b4;
+  --fg-faint: #66727e;
+  --blue: #7cc4ff;
+  --amber: #f0b46a;
+  --purple: #b39dff;
+  --red: #ff7b72;
+  --ok: #6ee7b7;
+  --icon-bg: var(--bg);
+  --shadow: none;
+  --glow-1: rgba(99, 102, 241, .30);
+  --glow-2: rgba(217, 70, 239, .18);
+  --notice-bg: rgba(245, 158, 11, .10);
+  --notice-border: rgba(245, 158, 11, .22);
+  --notice-fg: #d6bc8a;
+}
+
+/* ===== 基础件 ===== */
+
+.panel {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+
+.panel-label {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: .08em;
+  color: var(--fg-faint);
+  margin-bottom: 14px;
+}
+
+.chip {
+  font-family: var(--mono);
+  font-size: 11px;
+  border-radius: 999px;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  color: var(--fg-dim);
+}
+
+.tag {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--fg-dim);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+/* 主题/皮肤切换按钮。所有页面共用，具体形状由 skin.css 按皮肤重画。 */
+.theme-toggle {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--fg-dim);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color .18s, border-color .18s, background-color .18s, transform .3s var(--ease-out);
+}
+
+.theme-toggle:hover { color: var(--fg); border-color: var(--card-border-hover); }
+.theme-toggle:active { transform: rotate(-90deg) scale(.92); }
+
+/* ===== 全屏环境光 =====
+   站点页与落地页都有这一层；各自在 page CSS 里给渐变，这里只负责铺满视口。 */
+.bg-glow {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ===== 页面过渡 =====
+   跨文档 View Transitions：浏览器在导航时把旧页拍一张快照、新页也拍一张，
+   再用下面两条伪元素把两张接起来。零 JS、零延迟。
+   五个页面都加载本文件，两端都有这套规则，浏览器才知道怎么接。 */
+@view-transition { navigation: auto; }
+
+@keyframes vt-out { to { opacity: 0; } }
+@keyframes vt-in { from { opacity: 0; } }
+
+::view-transition-old(root) { animation: vt-out .16s ease both; }
+::view-transition-new(root) { animation: vt-in .24s ease both; }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none; }
+}

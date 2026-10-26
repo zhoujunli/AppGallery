@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- ClaudePocket 应用图标。图形取自 example1.html 的内联符号 #cp-icon，
+       与 macOS/Android 各平台 app 图标是同一张图。
+       四周 20.48 的空边是原图自带的，保留 —— 正是它让这张图读起来像一个图标，
+       而不是一块色板。 -->
+  <defs>
+    <linearGradient id="cpField" x1="0" y1="0" x2="0.45" y2="1">
+      <stop offset="0" stop-color="#5eead4"/>
+      <stop offset="0.5" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  <rect x="20.48" y="20.48" width="471.04" height="471.04" rx="110.7" fill="url(#cpField)"/>
+  <rect x="104" y="128" width="304" height="256" rx="34" fill="#06251c"/>
+  <g fill="none" stroke="#6ee7b7" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M164 240 L208 274 L164 308"/>
+    <path d="M228 308 L296 308"/>
+  </g>
+</svg>

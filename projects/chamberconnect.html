@@ -1,0 +1,1745 @@
+<!DOCTYPE html>
+<!-- 静态默认 = 玻璃 · 浅色，和 theme.css / <meta color-scheme> 对齐。
+     theme.js 一执行就会按存储或系统偏好覆盖它们；脚本被关掉时页面也还有一套完整皮肤。 -->
+<html lang="zh-CN" data-skin="glass" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>商会通 — 一个后台，一张地图，管好一个商会</title>
+<meta name="description" content="商会通把多层级商会、会员与企业档案、入会审批和一张高德地图收进同一套系统。">
+<meta name="color-scheme" content="only light">
+<!-- 同步加载，且必须在样式表之前：它一执行就把 data-skin / data-theme 写到
+     <html> 上，赶在首帧之前，否则会白闪。详见 assets/theme.js 顶部。 -->
+<script src="../assets/theme.js"></script>
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+  /* 设计系统（底色、文字、描边、语义色、字体栈、圆角、--maxw）在
+     ../assets/theme.css。这里只留商会通的品牌覆盖：强调色和辉光。 */
+  :root {
+    /* 强调色：变量名沿用 demo 的 --accent / --accent-dim，只换值 */
+    --accent: #818cf8;
+    --accent-dim: #4338ca;
+    /* 辉光取品牌色。位置留在下面 .bg-glow 那条规则里 —— 位置是这个页面的排布。 */
+    --glow-1: rgba(129, 140, 248, .10);
+    --glow-2: rgba(124, 196, 255, .07);
+    /* 吸顶导航那层毛玻璃的底色。深色下是半透明的墨，浅色下是半透明的白。 */
+    --nav-bg: rgba(11, 13, 16, .78);
+  }
+
+  /* 浅色的品牌覆盖必须落在 [data-theme="light"] 里，不能只写 :root：
+     theme.css 的 [data-theme="light"] 与本页的 :root 同特异性 (0,1,0)，而本页
+     的 <style> 在 theme.css 之后加载 —— 只写 :root 的话它连浅色主题一起盖掉。 */
+  [data-theme="light"] {
+    --accent: #4f46e5;
+    --accent-dim: #c7d2fe;
+    --glow-1: rgba(79, 70, 229, .10);
+    --glow-2: rgba(37, 99, 235, .07);
+    --nav-bg: rgba(255, 255, 255, .78);
+  }
+
+  /* 插图（手机截图、后台控制台）把品牌令牌也钉回深色。theme.css 的 .ui-dark
+     只钉中性令牌（底色、文字、描边），品牌色各家不一样，得各页面自己钉。 */
+  .ui-dark {
+    --accent: #818cf8;
+    --accent-dim: #4338ca;
+    --glow-1: rgba(129, 140, 248, .10);
+    --glow-2: rgba(124, 196, 255, .07);
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  .bg-glow {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(680px 420px at 78% -8%, var(--glow-1), transparent 70%),
+      radial-gradient(560px 380px at 8% 4%, var(--glow-2), transparent 70%);
+  }
+
+  .wrap { position: relative; z-index: 1; max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  code, kbd, pre { font-family: var(--mono); }
+
+  /* ---------- nav ---------- */
+  header.nav {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px);
+    background: var(--nav-bg);
+    border-bottom: 1px solid transparent;
+    transition: border-color .25s ease;
+  }
+  header.nav.stuck { border-bottom-color: var(--line); }
+  .nav-inner {
+    max-width: var(--maxw); margin: 0 auto; padding: 14px 24px;
+    display: flex; align-items: center; gap: 20px;
+  }
+  /* 回 AppGallery 的返回链接。字号比导航链接小一档，压在最左边当路标。 */
+  .nav-back { color: var(--fg-faint); font-size: 13px; text-decoration: none; flex: none; transition: color .18s; }
+  .nav-back:hover { color: var(--fg); text-decoration: none; }
+  /* nowrap 是这条导航真正需要的：.brand 是 flex 子项，窄屏被挤到只剩一个字宽时，
+     「商会通」会逐字换行成竖排三行（390px 实测如此）。 */
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+  /* 真应用图标（src/static/logo.png，manifest.json 给各档都指它）裁到徽标本身、
+     去掉下面的「商会通」三个字（导航里已经有这几个字），再缩到 26px 显示的 2.5 倍。
+     原图 754×754 / 160KB，直接内嵌会把文件撑成四倍，这里压到 10KB。 */
+  .brand .mark {
+    width: 26px; height: 26px; flex: none; display: block;
+    border-radius: 6px; object-fit: cover;
+  }
+  .nav-links { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+  .nav-links a {
+    color: var(--fg-dim); font-size: 14px; padding: 6px 11px; border-radius: 8px;
+    text-decoration: none; transition: color .18s, background .18s;
+  }
+  .nav-links a:hover { color: var(--fg); background: #171c23; }
+  .nav-links a.active { color: var(--accent); background: #1b1f2e; }
+
+  /* ---------- hero ---------- */
+  /* 只写上下内边距，别用 padding 简写 —— 会把 .wrap 的左右 24px 一并抹成 0。 */
+  .hero { padding-top: 78px; padding-bottom: 34px; }
+  .hero-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 56px; align-items: center; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 12px; color: var(--fg-dim);
+    border: 1px solid var(--line); background: var(--bg-soft);
+    padding: 5px 12px; border-radius: 999px; margin-bottom: 22px;
+  }
+  .badge .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+    animation: badge-breathe 2.6s ease-in-out infinite;
+  }
+  @keyframes badge-breathe {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .45; transform: scale(.78); }
+  }
+
+  h1 {
+    font-size: clamp(34px, 5vw, 56px); line-height: 1.12; letter-spacing: -.025em;
+    margin: 0 0 20px; font-weight: 720;
+  }
+  h1 .grad {
+    background: linear-gradient(100deg, var(--accent) 10%, var(--blue) 60%, var(--purple));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lede { font-size: clamp(16px, 1.6vw, 18.5px); color: var(--fg-dim); margin: 0 0 30px; max-width: 46ch; }
+  .lede strong { color: var(--fg); font-weight: 600; }
+
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 11px 20px; border-radius: 10px; font-size: 15px; font-weight: 580;
+    border: 1px solid var(--line); background: var(--bg-soft); color: var(--fg);
+    transition: transform .16s ease, border-color .18s, background .18s;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); border-color: #35404c; }
+  .btn.primary {
+    background: linear-gradient(140deg, #6366f1, #57c8ff);
+    color: #0a0f2e; border-color: transparent; font-weight: 680;
+  }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn .arrow { transition: transform .18s ease; }
+  .btn:hover .arrow { transform: translateX(3px); }
+
+  /* ---------- 试用地址 ----------
+     明文 IP:端口直连，没有域名也没有证书。访客会看到浏览器标「不安全」，
+     所以地址按等宽字体原样露出来，一眼能看清连的是什么、也方便直接抄走。 */
+  .trial-addr {
+    display: inline-block; margin-top: 10px;
+    font-family: var(--mono); font-size: 12.5px;
+    color: var(--accent); background: #161b2b;
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
+    /* 这串地址没有可断点，min-content 就是整串宽度；在 361px 的真机上
+       会把单列网格顶宽 1px，整页出现横向滚动。允许在任意处折行。 */
+    overflow-wrap: anywhere;
+  }
+  .trial-addr:hover { text-decoration: none; border-color: #3a4270; }
+  .trial-note { margin: 10px 0 0; font-size: 13px; color: var(--fg-faint); }
+
+  .hero-meta {
+    margin-top: 26px; display: flex; gap: 18px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12.5px; color: var(--fg-faint);
+  }
+
+  /* ---------- phone shell ---------- */
+  .phone {
+    width: 100%; max-width: 322px; margin: 0 auto;
+    border: 1px solid #2b323b; border-radius: 34px; padding: 11px;
+    background: linear-gradient(170deg, #1b2129, #0e1116 60%);
+    box-shadow: 0 30px 70px -30px rgba(0, 0, 0, .9), 0 0 0 6px rgba(255, 255, 255, .015);
+  }
+  .phone-screen {
+    border-radius: 25px; overflow: hidden; border: 1px solid #1d2229;
+    position: relative;
+  }
+  .phone-notch { height: 22px; display: grid; place-items: center; }
+  .phone-notch span { width: 62px; height: 5px; border-radius: 3px; background: #232a33; }
+
+  /* ---------- 手机屏幕里画的是 app 真实的界面 ----------
+     取值全部照抄 ChamberConnet-uniapp/src/uni.scss，不自创：
+       $bg-color #f5f5f5 · $primary-color #4338ca · $primary-light #eef2ff
+       $text-color #333 · $text-secondary #666 · $text-placeholder #999
+       $border-color #e5e7eb · $danger-color #ef4444 · $success-color #22c55e
+     结构对照 src/pages.json 与各页 .vue。 */
+  .phone-screen {
+    display: flex; flex-direction: column; height: 604px;
+    background: #f5f5f5; color: #333;
+  }
+  .screen { flex: 1; min-height: 0; overflow-y: auto; }
+  .screen.map-screen { display: flex; flex-direction: column; overflow: hidden; }
+  .screen[hidden] { display: none; }   /* 必须排在 .screen.map-screen 之后才压得住 */
+
+  /* 底栏（pages.json tabBar，选中色 #4338ca） */
+  .tabbar {
+    flex: none; margin-top: auto; display: grid; grid-template-columns: repeat(4, 1fr);
+    background: #fff; border-top: 1px solid #e5e7eb;
+  }
+  .tabbar button {
+    font: inherit; background: none; border: 0; cursor: pointer;
+    padding: 8px 2px 9px; display: grid; justify-items: center; gap: 3px;
+    font-size: 10.5px; color: #999;
+  }
+  .tabbar button .tico { width: 19px; height: 19px; display: block; }
+  .tabbar button[aria-selected="true"] { color: #4338ca; font-weight: 600; }
+
+  /* 搜索卡（index.vue 的 search-bar：上行类别常驻，下行搜索输入） */
+  .app-search { flex: none; background: #fff; border-bottom: 1px solid #e5e7eb; padding-bottom: 9px; }
+  .app-search-tabs { display: flex; gap: 4px; padding: 9px 10px 0; }
+  .app-search-tabs span { font-size: 12px; color: #666; padding: 4px 10px; border-radius: 7px; }
+  .app-search-tabs span.on { color: #4338ca; background: #eef2ff; font-weight: 600; }
+  .app-search-input {
+    display: flex; align-items: center; gap: 6px; margin: 8px 10px 0;
+    padding: 7px 11px; border: 1px solid #e5e7eb; border-radius: 999px;
+    background: #f8f9fa; font-size: 12px; color: #999;
+  }
+
+  .app-map { position: relative; flex: 1; min-height: 0; }
+
+  /* 悬浮操作组（index.vue 的 map-actions：名称 / 选点 / 定位） */
+  .app-actions {
+    position: absolute; right: 10px; top: 10px; z-index: 3;
+    display: flex; flex-direction: column; background: rgba(255, 255, 255, .96);
+    border: 1px solid #e5e7eb; border-radius: 11px; overflow: hidden;
+    box-shadow: 0 4px 14px -6px rgba(0, 0, 0, .25);
+  }
+  .app-actions div {
+    padding: 7px 10px; display: grid; justify-items: center; gap: 2px;
+    font-size: 10px; color: #666; border-bottom: 1px solid #eef0f3;
+  }
+  .app-actions div:last-child { border-bottom: 0; }
+  .app-actions .ico { font-size: 13px; line-height: 1; }
+
+  /* 标记详情弹窗（index.vue 的 popup-card，商会信息那枚） */
+  .app-popup {
+    position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 4;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 13px;
+    padding: 11px 13px 12px; box-shadow: 0 10px 26px -14px rgba(0, 0, 0, .4);
+  }
+  .app-popup[hidden] { display: none; }
+  .app-popup .badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10.5px; color: #4338ca; background: #eef2ff;
+    border-radius: 999px; padding: 2px 8px;
+  }
+  .app-popup h4 { margin: 7px 0 6px; font-size: 14px; font-weight: 620; color: #333; }
+  .app-popup .row { display: flex; gap: 7px; font-size: 11.5px; color: #666; padding: 2px 0; }
+  .app-popup .row b { color: #999; font-weight: 400; flex: none; }
+  .app-popup .acts { display: flex; gap: 8px; margin-top: 9px; }
+  .app-popup .acts span {
+    flex: 1; text-align: center; font-size: 12px; padding: 7px 0; border-radius: 8px;
+  }
+  .app-popup .acts .ghost { color: #4338ca; background: #eef2ff; }
+  .app-popup .acts .solid { color: #fff; background: #4338ca; }
+
+  /* 顶部双 Tab（apply.vue：提交申请 / 我的记录） */
+  .app-tabs { display: flex; background: #fff; border-bottom: 1px solid #e5e7eb; }
+  .app-tabs span {
+    flex: 1; text-align: center; padding: 11px 0; font-size: 13px; color: #666;
+    border-bottom: 2px solid transparent;
+  }
+  .app-tabs span.on { color: #4338ca; font-weight: 600; border-bottom-color: #4338ca; }
+
+  /* 表单（apply.vue） */
+  .app-form { padding: 12px 13px 18px; display: flex; flex-direction: column; gap: 11px; }
+  .app-label { font-size: 12px; color: #333; display: block; margin-bottom: 5px; }
+  .app-label i { color: #ef4444; font-style: normal; margin-left: 2px; }
+  .app-input {
+    font-size: 12.5px; color: #333; background: #fff;
+    border: 1px solid #e5e7eb; border-radius: 8px; padding: 9px 11px;
+  }
+  .app-input.blank { color: #999; }
+  .app-input.readonly { color: #999; background: #f8f9fa; }
+  .app-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .app-tags span {
+    font-size: 11.5px; color: #4338ca; background: #eef2ff;
+    border-radius: 6px; padding: 4px 9px;
+  }
+  .app-form-acts { display: flex; gap: 9px; margin-top: 4px; }
+  .app-form-acts span { flex: 1; text-align: center; font-size: 13px; padding: 10px 0; border-radius: 9px; }
+  .app-form-acts .line { color: #666; border: 1px solid #e5e7eb; background: #fff; }
+  .app-form-acts .fill { color: #fff; background: #4338ca; font-weight: 600; }
+
+  /* 备忘录（memo.vue） */
+  .app-topbar {
+    display: flex; align-items: center; padding: 11px 13px;
+    background: #fff; border-bottom: 1px solid #e5e7eb;
+  }
+  .app-topbar .count { font-size: 12px; color: #666; }
+  .app-topbar .add { margin-left: auto; font-size: 12px; color: #4338ca; font-weight: 600; }
+  .app-memo-list { padding: 11px 13px 16px; display: flex; flex-direction: column; gap: 9px; }
+  .app-memo {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 11px; padding: 11px 12px;
+  }
+  .app-memo .t { font-size: 13px; font-weight: 600; color: #333; }
+  .app-memo .chips { display: flex; gap: 5px; margin: 6px 0; flex-wrap: wrap; }
+  .app-memo .chips span {
+    font-size: 10.5px; border-radius: 5px; padding: 2px 7px;
+    color: #4338ca; background: #eef2ff;
+  }
+  .app-memo .chips span.co { color: #d97706; background: #fef3e2; }
+  .app-memo .body { font-size: 12px; color: #666; line-height: 1.65; }
+  .app-memo .foot {
+    display: flex; align-items: center; margin-top: 9px;
+    font-size: 10.5px; color: #999; border-top: 1px solid #f0f1f3; padding-top: 8px;
+  }
+  .app-memo .foot .acts { margin-left: auto; display: flex; gap: 12px; }
+  .app-memo .foot .acts span { color: #4338ca; }
+  .app-memo .foot .acts span.danger { color: #ef4444; }
+
+  /* 我的（profile.vue） */
+  .app-profile-head {
+    display: flex; align-items: center; gap: 11px;
+    padding: 15px 13px; background: #fff; border-bottom: 1px solid #e5e7eb;
+  }
+  .app-avatar {
+    width: 42px; height: 42px; border-radius: 50%; flex: none;
+    display: grid; place-items: center; font-size: 17px; color: #fff;
+    background: #4338ca;
+  }
+  .app-profile-head .name { font-size: 14px; font-weight: 620; color: #333; }
+  /* 原先是 .phone —— 和手机外壳那个 .phone 撞了名。'.app-profile-head .phone'
+     只覆盖了字号和颜色，没清掉外壳的 max-width:322px、34px 圆角、深色渐变和
+     '0 30px 70px' 的大阴影，切到「我的」那页时电话号码会变成一个黑色圆角盒子。 */
+  .app-profile-head .pnum { font-size: 11.5px; color: #999; margin-top: 2px; }
+  .app-profile-head .co { font-size: 11.5px; color: #666; margin-top: 3px; }
+  .app-sec { padding: 13px 13px 0; }
+  .app-sec > .h { font-size: 11.5px; color: #999; margin-bottom: 7px; }
+  .app-card {
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 11px; overflow: hidden;
+  }
+  .app-card .row {
+    display: flex; align-items: center; gap: 9px;
+    padding: 11px 12px; font-size: 12.5px; color: #333;
+    border-bottom: 1px solid #f0f1f3;
+  }
+  .app-card .row:last-child { border-bottom: 0; }
+  .app-card .row .ico { font-size: 14px; }
+  .app-card .row .arrow { margin-left: auto; color: #ccc; font-size: 12px; }
+  .app-card .row .tag { margin-left: auto; font-size: 10.5px; color: #4338ca; background: #eef2ff; border-radius: 5px; padding: 2px 7px; }
+  .app-card .row.now { background: #fafaff; }
+  .app-logout {
+    display: block; width: calc(100% - 26px); margin: 13px; padding: 10px 0;
+    text-align: center; font-size: 13px; color: #ef4444;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 11px;
+  }
+
+  /* 手机里的地图画浅色（index.vue 的 map 是浅底），后台那台小地图仍是深色 */
+  .phone-screen .map { height: 100%; background: #e9ecef; }
+  .phone-screen .map-grid {
+    background-image:
+      linear-gradient(rgba(0, 0, 0, .05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0, 0, 0, .05) 1px, transparent 1px);
+  }
+  .phone-screen .road { background: #fff; }
+  .phone-screen .pin .head { border-color: #fff; }
+  .phone-screen .map-card {
+    border-color: #e5e7eb; background: rgba(255, 255, 255, .96);
+  }
+  .phone-screen .map-card h4 { color: #333; }
+  .phone-screen .map-card p { color: #666; }
+
+  /* ---------- 地图：hero 装饰机与 #phone 共用同一套 ---------- */
+  .map { position: relative; height: 296px; overflow: hidden; background: #0a0d11; }
+  .map-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255, 255, 255, .028) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, .028) 1px, transparent 1px);
+    background-size: 26px 26px, 26px 26px;
+    -webkit-mask-image: radial-gradient(72% 62% at 50% 46%, #000 45%, transparent 100%);
+    mask-image: radial-gradient(72% 62% at 50% 46%, #000 45%, transparent 100%);
+  }
+  .road { position: absolute; background: #141a21; }
+  .road.h { left: -12%; right: -12%; height: 7px; }
+  .road.v { top: -12%; bottom: -12%; width: 7px; }
+  .road.h.a { top: 30%; transform: rotate(-4deg); }
+  .road.h.b { top: 70%; transform: rotate(3deg); }
+  .road.v.a { left: 28%; transform: rotate(2deg); }
+  .road.v.b { left: 74%; transform: rotate(-3deg); }
+
+  .pin {
+    position: absolute; left: var(--x); top: var(--y);
+    transform: translate(-50%, -100%);
+    padding: 0; border: 0; background: none; display: grid; place-items: center;
+    transition: filter .2s;
+  }
+  .pin .head {
+    width: 15px; height: 15px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+    border: 1.5px solid #0a0d11;
+  }
+  /* 标记配色照抄 index.vue 的 markerColor()：商会 #4338ca、公司 #d97706 */
+  .pin.chamber .head { background: #4338ca; }
+  .pin.company .head { width: 11px; height: 11px; background: #d97706; }
+  .pin[aria-current="true"] .head { box-shadow: 0 0 0 4px rgba(129, 140, 248, .22); }
+
+  /* hero 那台只做装饰：整体不可点 */
+  .hero-phone { pointer-events: none; }
+
+  /* 地图底部信息卡 */
+  .map-card {
+    position: absolute; left: 10px; right: 10px; bottom: 10px;
+    border: 1px solid var(--line); border-radius: 11px; background: rgba(17, 20, 25, .94);
+    padding: 11px 13px; transition: transform .2s ease, opacity .2s ease;
+  }
+  .map-card[hidden] { display: none; }
+  .map-card h4 { margin: 0 0 4px; font-size: 13.5px; font-weight: 620; }
+  .map-card p { margin: 0; font-size: 12px; color: var(--fg-dim); font-family: var(--mono); }
+
+  /* flow diagram */
+  .flow {
+    display: grid; grid-template-columns: 1fr auto 1fr; align-items: stretch;
+    gap: 0; border: 1px solid var(--line); border-radius: var(--radius);
+    background: linear-gradient(180deg, #12161c, #0e1217); overflow: hidden;
+  }
+  .flow .node { padding: 22px 20px; }
+  .flow .node h4 { margin: 0 0 6px; font-size: 15px; font-weight: 620; }
+  .flow .node p { margin: 0; font-size: 13px; color: var(--fg-faint); line-height: 1.6; }
+  .flow .arrow {
+    display: grid; place-items: center; padding: 0 8px;
+    color: var(--fg-faint); font-family: var(--mono); font-size: 11px;
+    border-left: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft);
+    background: #0d1116; text-align: center; gap: 4px;
+  }
+  .flow .arrow span { display: block; }
+  .flow .arrow .glyph { color: var(--accent); font-size: 15px; }
+
+  .principles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 20px; }
+  .pcard {
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 20px;
+    background: var(--bg-card);
+  }
+  .pcard .n {
+    font-family: var(--mono); font-size: 12px; color: var(--accent);
+    border: 1px solid var(--accent-dim); border-radius: 6px; padding: 2px 7px;
+    display: inline-block; margin-bottom: 12px;
+  }
+  .pcard h4 { margin: 0 0 8px; font-size: 15.5px; }
+  .pcard p { margin: 0; font-size: 14px; color: var(--fg-dim); }
+
+  /* feature grid */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card {
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 20px;
+    background: var(--bg-card); transition: border-color .2s, transform .25s var(--ease-out), box-shadow .25s var(--ease-out);
+  }
+  .card:hover { border-color: #313c48; transform: translateY(-3px); box-shadow: var(--card-shadow); }
+  .card .ico {
+    width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+    background: #1b1f3a; border: 1px solid #2f3566; color: var(--accent); margin-bottom: 14px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 16px; font-weight: 620; }
+  .card p { margin: 0; font-size: 14px; color: var(--fg-dim); }
+  .card p + p { margin-top: 10px; }
+  .card code {
+    font-size: 12.5px; background: #0d1218; border: 1px solid var(--line-soft);
+    padding: 1px 6px; border-radius: 5px; color: var(--blue);
+  }
+  .card .btn { margin-top: 16px; }
+
+  /* ---------- 后台控制台 ---------- */
+  .console {
+    border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+    background: linear-gradient(180deg, #12161c, #0e1217);
+    box-shadow: 0 26px 60px -34px rgba(0, 0, 0, .9);
+  }
+  .console-bar {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft); background: #0f141a;
+  }
+  .console-bar .dot { width: 9px; height: 9px; border-radius: 50%; background: #2b333d; flex: none; }
+  .console-bar .addr {
+    margin-left: 8px; font-family: var(--mono); font-size: 11.5px; color: var(--fg-faint);
+    border: 1px solid var(--line-soft); border-radius: 7px; padding: 3px 10px;
+  }
+  .console-body { display: grid; grid-template-columns: 186px minmax(0, 1fr); min-height: 336px; }
+
+  .console-side {
+    display: flex; flex-direction: column; gap: 2px; padding: 12px 10px;
+    border-right: 1px solid var(--line-soft); background: #0d1116;
+  }
+  .console-side button {
+    text-align: left; font: inherit; font-size: 13.5px; color: var(--fg-dim);
+    background: none; border: 1px solid transparent; border-radius: 8px;
+    padding: 7px 11px; cursor: pointer; transition: color .18s, background .18s;
+  }
+  .console-side button:hover { color: var(--fg); background: #151a21; }
+  .console-side button[aria-selected="true"] { color: var(--accent); background: #1b1f2e; }
+
+  .console-main { padding: 18px 20px; min-width: 0; }
+  .console-page[hidden] { display: none; }
+  .console-page.fade-in { animation: pageIn .16s ease-out; }
+  @keyframes pageIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .console-main h3 { margin: 0 0 12px; font-size: 15px; font-weight: 620; }
+
+  .filters { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 14px; }
+  .filters span {
+    font-family: var(--mono); font-size: 11.5px; color: var(--fg-dim);
+    border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px;
+  }
+  .filters span.on { color: var(--accent); border-color: var(--accent-dim); background: #1b1f2e; }
+
+  /* 状态标签 */
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 11px;
+    border-radius: 5px; padding: 1px 7px; border: 1px solid;
+  }
+  .tag.ok { color: var(--ok); border-color: #24513f; background: #10201a; }
+  .tag.wait { color: var(--amber); border-color: #4a3a22; background: #1d1710; }
+  .tag.bad { color: var(--red); border-color: #4a2624; background: #1e1211; }
+  .tag.off { color: var(--fg-faint); border-color: var(--line); background: #0f141a; }
+
+  .console-note { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 20px; }
+
+  /* 行业管理 / 角色权限 用两级列表代替表格 */
+  .tree { margin: 0; padding: 0; list-style: none; font-size: 13.5px; }
+  .tree > li { padding: 5px 0; color: var(--fg-dim); }
+  .tree > li > b { color: var(--fg); font-weight: 600; }
+  .tree ul { list-style: none; margin: 4px 0 0; padding: 0 0 0 14px; }
+  .tree ul li { padding: 3px 0; color: var(--fg-faint); font-family: var(--mono); font-size: 12.5px; }
+  .tree ul li::before { content: "└ "; color: #333c46; }
+
+  /* 窄屏：侧栏由竖排转横向 chips 条（规格 §8 的第四档断点） */
+  @media (max-width: 480px) {
+    .console-body { grid-template-columns: 1fr; }
+    .console-side {
+      flex-direction: row; overflow-x: auto; gap: 6px;
+      border-right: 0; border-bottom: 1px solid var(--line-soft);
+    }
+    .console-side button { white-space: nowrap; }
+  }
+
+  .demo-two { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 40px; align-items: start; }
+  .demo-two .phone { max-width: 300px; margin: 0; }
+
+  /* 一行来自系统原样的东西 */
+  .quote {
+    margin: 14px 0 0; padding: 12px 15px; border-left: 2px solid var(--accent-dim);
+    background: #0f141a; border-radius: 0 8px 8px 0;
+    font-family: var(--mono); font-size: 12.5px; color: var(--fg-dim); line-height: 1.9;
+  }
+  .quote b { color: var(--fg); font-weight: 600; }
+  .quote em { color: var(--fg-faint); font-style: normal; }
+
+  /* ---------- 审批状态机 ---------- */
+  .fsm { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin: 6px 0 4px; }
+  .fsm .st {
+    font-family: var(--mono); font-size: 12px; color: var(--fg-dim);
+    border: 1px solid var(--line); border-radius: 8px; background: var(--bg-card);
+    padding: 6px 11px;
+  }
+  .fsm .st.done { color: var(--ok); border-color: #24513f; }
+  .fsm .st.bad { color: var(--red); border-color: #4a2624; }
+  .fsm .st.neutral { color: var(--fg-faint); }
+  .fsm .ar { font-family: var(--mono); font-size: 11px; color: var(--fg-faint); padding: 0 9px; }
+  .fsm .ar.alt { color: var(--amber); }
+
+  /* 边界 */
+  .limits { display: grid; gap: 12px; }
+  .limit {
+    display: flex; gap: 13px; align-items: flex-start;
+    border: 1px solid var(--line); border-left: 2px solid var(--amber);
+    border-radius: 10px; padding: 15px 17px; background: var(--bg-card);
+  }
+  .limit .tag {
+    font-family: var(--mono); font-size: 11px; color: var(--amber);
+    border: 1px solid #4a3a22; background: #1d1710; border-radius: 6px;
+    padding: 2px 7px; flex: none; margin-top: 2px;
+  }
+  .limit p { margin: 0; font-size: 14px; color: var(--fg-dim); }
+  .limit p b, .limit p strong { color: var(--fg); font-weight: 600; }
+
+  /* 常见问题：原生 details，没有 JS 也能开合 */
+  details {
+    border: 1px solid var(--line); border-radius: 11px; background: var(--bg-card);
+    padding: 0; margin-bottom: 10px; overflow: hidden;
+  }
+  details summary {
+    cursor: pointer; padding: 15px 18px; font-size: 15px; font-weight: 560;
+    list-style: none; display: flex; align-items: center; gap: 10px;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before {
+    content: "+"; font-family: var(--mono); color: var(--accent); font-size: 15px; width: 12px;
+  }
+  details[open] summary::before { content: "−"; }
+  details .ans { padding: 0 18px 16px 40px; color: var(--fg-dim); font-size: 14px; }
+  details .ans p { margin: 0 0 10px; }
+  details .ans p:last-child { margin-bottom: 0; }
+
+  /* 页脚 */
+  footer {
+    border-top: 1px solid var(--line); padding: 46px 0 60px; color: var(--fg-faint); font-size: 13.5px;
+  }
+  .foot-grid { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1.2fr; gap: 30px; margin-bottom: 30px; }
+  .foot-grid h5 {
+    margin: 0 0 10px; font-size: 12.5px; font-family: var(--mono); letter-spacing: .06em;
+    text-transform: uppercase; color: var(--fg-dim);
+  }
+  .foot-grid ul { list-style: none; margin: 0; padding: 0; }
+  .foot-grid li { margin-bottom: 6px; font-family: var(--mono); font-size: 12.5px; }
+  .foot-grid li span { color: var(--fg-faint); font-family: var(--sans); }
+  /* 地址是明文 IP:端口，一长串没有断点，窄栏里必须允许在任意字符处折行 */
+  .foot-grid li.addr { word-break: break-all; }
+  .foot-grid li.addr a { color: var(--fg-dim); }
+  .foot-grid li.addr a:hover { color: var(--accent); }
+  .foot-bottom { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  /* ---------- sections ---------- */
+  section { padding: 76px 0; }
+  section + section { border-top: 1px solid var(--line-soft); }
+
+  .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 12px;
+  }
+  h2 { font-size: clamp(24px, 3vw, 33px); letter-spacing: -.02em; margin: 0 0 14px; font-weight: 680; }
+  .sub { color: var(--fg-dim); margin: 0 0 40px; max-width: 62ch; }
+
+  .subhead {
+    font-size: 17px; font-weight: 620; letter-spacing: -.01em;
+    margin: 46px 0 16px;
+  }
+
+  /* steps timeline */
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  .steps li {
+    position: relative; padding: 0 0 26px 46px; counter-increment: s;
+  }
+  .steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 2px;
+    width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+    font-family: var(--mono); font-size: 12.5px; font-weight: 700;
+    color: var(--accent); background: #1b1f2e; border: 1px solid var(--accent-dim);
+  }
+  .steps li:not(:last-child)::after {
+    content: ""; position: absolute; left: 14px; top: 34px; bottom: 4px; width: 1px;
+    background: linear-gradient(180deg, var(--line), transparent);
+  }
+  .steps h4 { margin: 3px 0 6px; font-size: 15.5px; }
+  .steps p { margin: 0; font-size: 14px; color: var(--fg-dim); }
+  .steps .note {
+    display: block; margin-top: 8px; font-family: var(--mono); font-size: 12.5px;
+    color: var(--amber);
+  }
+
+  /* 部署卡片：一排三张，按钮贴卡片底 */
+  .secure { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .secure .card {
+    background: linear-gradient(180deg, #141a20, #11151a);
+    display: flex; flex-direction: column;
+  }
+  .secure .card .btn { margin-top: auto; }
+
+  /* table */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 620px; }
+  th, td { text-align: left; padding: 11px 15px; border-bottom: 1px solid var(--line-soft); }
+  /* 表头底色走令牌，不写死：同一个 th 既服务正文那张角色权限表（该跟着主题翻），
+     也服务后台截图里的表格（靠父层 .ui-dark 把 --bg-soft 钉回深色，照旧是暗的）。 */
+  th { background: var(--bg-soft); font-weight: 600; color: var(--fg-dim); font-size: 12.5px;
+       font-family: var(--mono); letter-spacing: .02em; }
+  tr:last-child td { border-bottom: none; }
+  td code { color: var(--blue); font-size: 12.5px; }
+  td:first-child { white-space: nowrap; }
+
+  /* ---------- interactions ---------- */
+
+  /* reading progress, drawn on the nav's own bottom edge */
+  .nav-progress {
+    position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+    transform: scaleX(0); transform-origin: 0 50%; opacity: .85;
+    background: linear-gradient(90deg, var(--accent), var(--blue), var(--purple));
+  }
+
+  /* The active-section highlight is one block that travels between links,
+     instead of each link lighting up where it stands. */
+  .nav-links { position: relative; }
+  .nav-pill {
+    position: absolute; top: 0; left: 0; height: 100%; width: 0;
+    border-radius: 8px; background: #1b1f2e; pointer-events: none;
+    transition: transform .3s cubic-bezier(.4, 0, .2, 1), width .3s cubic-bezier(.4, 0, .2, 1);
+  }
+  .nav-links.js-pill a { position: relative; z-index: 1; }
+  .nav-links.js-pill a.active { background: none; }
+
+  /* the rule in front of a kicker */
+  .kicker { display: flex; align-items: center; gap: 9px; }
+  .kicker::before {
+    content: ""; width: 2px; height: 12px; border-radius: 2px; flex: none;
+    background: var(--accent);
+  }
+
+  /* reveal */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .65s var(--ease-out), transform .65s var(--ease-out); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (max-width: 940px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+    .phone { max-width: 300px; }
+    .flow { grid-template-columns: 1fr; }
+    .flow .arrow {
+      border: none; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
+      padding: 8px 0; flex-direction: row;
+    }
+    .flow .arrow span { display: inline; }
+    .flow .arrow .glyph { transform: rotate(90deg); }
+    .principles, .grid, .secure, .console-note { grid-template-columns: 1fr; }
+    .demo-two { grid-template-columns: 1fr; gap: 28px; }
+    .demo-two .phone { margin: 0 auto; }
+    .foot-grid { grid-template-columns: 1fr; gap: 22px; }
+    section { padding: 58px 0; }
+  }
+  /* 这排链接一行放不下就会折行，而那个跟着滚动的指示块只能描述一行 —— 一折行它
+     就落回素色背景。所以断点必须落在「真的放不下」之上，不能凭感觉。
+
+     分三段，不是一个断点：
+
+       > 900px       原样
+       740–900px     压着显示（手机横屏正好落在这一段）
+       < 740px       整排收起
+
+     900 这个数是量出来的：1400px 下量每个链接的自然宽度（此时都是一行，量到的就是
+     它本来的宽度），这 8 个链接连间距在内占 540px；加上「← AppGallery」、品牌、◐
+     和三段间距，整条导航一行需要 844px。实测吻合 —— 840px 折两行，880px 不折。
+
+     中间那段的压法，是按「同样省一像素、哪个更不显眼」挑的：
+       链接的左右内边距 11→7px、字号 14→13px、链接间距 4→0
+       .nav-inner 的 gap 20→14px —— 最划算的一样。它自己占着 3×20 = 60px，收到 14
+                                     就凭空补出 18px，而内间距收紧几乎看不出来
+
+     这页是卡脖子的那页（8 个链接，两页里最多）， 740 这个下限就是它定的：
+       701px 差 8px     720px 余 10px     740px 余 30px     900px 余 190px
+
+     敢把链接的 flex-wrap 关掉，是因为放不下时它就不再折行、而是横向溢出 —— 那比折行
+     更糟。所以关掉的前提是「确实放得下」，而 30px 余量就是敢这么赌的全部理由。
+
+     赌的是汉字：这页的链接和品牌名全是中文，汉字是全角等宽，PingFang / OPPO Sans /
+     Noto CJK 的 advance width 差别极小，几个像素的浮动吃得住 30px。claudepocket 那页
+     品牌名是拉丁文字、浮动会大些，但那边链接少、740px 有 53px 余量，不受挤。
+
+     740 以下就真放不下了 —— 那点宽度里塞不下「← AppGallery + 品牌 + 8 个链接 + ◐」，
+     再压也只是把话挤成一团（701px 压到最狠仍差 8px）。整排收起，只留「← AppGallery」、
+     品牌和 ◐；落地页本来就是自上而下读的，跳锚点省下的那点滚动抵不上这个乱。
+
+     ◐ 那条 margin-left: auto 是补丁，不是设计：把右边这一切推向右边的力，本来是挂
+     在 .nav-links 身上的；链接一 display:none，那股力也一并没了，◐ 就贴到品牌名
+     后面去了 —— 手机横屏看到的正是这个。不能挪进 assets/theme.css：站点页的 ◐ 在
+     .nav-links 内部，那边的推力不该被动到。中间那段不需要它：链接还在，推力还在。
+
+     这里原有两条规则，跟着一起删了：「.nav-pill 单独隐藏」（多余的，.nav-pill 是
+     .nav-links 的子元素，父级不显示它自然也没了）和「活动链接改回实心底」
+     （那条本来就是为「指示块被关掉、得让活动项自己亮起来」写的，现在整排都不在，
+     没有可亮的对象）。 */
+  @media (max-width: 739px) {
+    .nav-links { display: none; }
+    .theme-toggle { margin-left: auto; }
+  }
+  /* 横屏夹缝：还放得下，就别把菜单整排收掉。740 / 900 两个数怎么来的，见上面那段。 */
+  @media (min-width: 740px) and (max-width: 900px) {
+    .nav-inner { gap: 14px; }
+    /* nowrap 是这一段的前提：留着 wrap 就还是会折行，白压。
+       单个链接上的 white-space: nowrap 负责另一半 —— 它是 flex 子项，min-width: auto
+       会退到 min-content，而中文的 min-content 是「一个字」，不锁住就会在链接内部
+       竖着折。两处缺一不可。 */
+    .nav-links { flex-wrap: nowrap; gap: 0; }
+    .nav-links a { padding: 6px 7px; font-size: 13px; white-space: nowrap; }
+  }
+  @media (max-width: 560px) {
+    /* 这里原本还有一条 `.nav-links a` 的缩字号规则。链接在 739px 就整排收起了，
+       它永远轮不到，删掉。 */
+    .wrap { padding: 0 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .badge .dot { animation: none; }
+    .nav-pill { transition: none; }
+  }
+
+  /* ===== 浅色主题 · 页面外壳 =====
+     只列「写死的深色字面值」。令牌驱动的那些（底色、文字、描边、--accent 系列、
+     .card/.pcard 的 var(--bg-card)…）自己会翻，不重复。
+     插图（.phone / .console）一律不在此列 —— 它们挂着 .ui-dark，整块钉死在深色；
+     同理 .tag.ok/.off 只在后台截图里出现，站点那张角色权限表用的是 .limit .tag。 */
+  [data-theme="light"] .nav-links a:hover { background: #f1f3f6; }
+  [data-theme="light"] .nav-links a.active { background: #eef2ff; }
+  [data-theme="light"] .nav-pill { background: #eef2ff; }
+  [data-theme="light"] .btn:hover { border-color: #cbd5e1; }
+  /* 深色那颗主按钮是「浅紫→天蓝」配深字，压在白底上会发飘。浅色换深一档的
+     靛蓝→蓝，配白字。 */
+  [data-theme="light"] .btn.primary {
+    background: linear-gradient(140deg, #6366f1, #2563eb); color: #fff;
+  }
+  [data-theme="light"] .trial-addr { background: #eef2ff; }
+  [data-theme="light"] .trial-addr:hover { border-color: #c7d2fe; }
+  [data-theme="light"] .card:hover { border-color: #c7d0da; }
+  [data-theme="light"] .card .ico { background: #eef2ff; border-color: #c7d2fe; }
+  [data-theme="light"] .card code { background: #f1f3f6; }
+  [data-theme="light"] .flow { background: linear-gradient(180deg, #f8fafc, #f2f5f8); }
+  [data-theme="light"] .flow .arrow { background: #eef2f6; }
+  [data-theme="light"] .quote { background: #f4f6f8; }
+  [data-theme="light"] .fsm .st.done { border-color: #a7f3d0; }
+  [data-theme="light"] .fsm .st.bad { border-color: #fecaca; }
+  [data-theme="light"] .limit .tag { border-color: #fde68a; background: #fffbeb; }
+  [data-theme="light"] .secure .card { background: linear-gradient(180deg, #fbfcfd, #f6f8fa); }
+</style>
+<!-- 皮肤版式最后加载：它把上面的页面框架画成 03 粗野或 08 玻璃，
+     手机屏、后台控制台这些 .ui-dark 插图保持原样。 -->
+<link rel="stylesheet" href="../assets/skin.css">
+<!-- .reveal 平时是 opacity:0，靠脚本加 .in 才显出内容。脚本一旦没跑（关掉 JS、
+     或被拦），整页正文会停在透明状态。这条 noscript 兜底，保证「关掉 JS 也必须
+     读得到」这条约束不被 CSS 破坏。
+     必须放在上面那两张样式表**之后**：两者选择器特异性相同，靠文档顺序决胜；
+     放前面的话 .reveal{opacity:0} 会盖掉它，等于没写。 -->
+<noscript><style>.reveal { opacity: 1; transform: none; } [data-theme-toggle], [data-skin-toggle] { display: none; }</style></noscript>
+</head>
+<body data-page="landing">
+
+<div class="bg-glow" id="glow" aria-hidden="true"></div>
+
+<header class="nav" id="nav">
+  <div class="nav-inner">
+    <a class="nav-back" href="../index.html">← AppGallery</a>
+    <a class="brand" href="#top"><img class="mark" src="data:image/png;base64,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" width="26" height="26" alt="">商会通</a>
+    <nav class="nav-links" id="navLinks">
+      <span class="nav-pill" id="navPill"></span>
+      <a href="#overview">全景</a>
+      <a href="#features">能力</a>
+      <a href="#admin">后台</a>
+      <a href="#phone">手机端</a>
+      <a href="#roles">角色与权限</a>
+      <a href="#start">开始使用</a>
+      <a href="#limits">边界</a>
+      <a href="#faq">常见问题</a>
+    </nav>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="切换明暗模式">◐</button>
+    <button class="theme-toggle skin-toggle" type="button" data-skin-toggle aria-label="切换皮肤">✳</button>
+  </div>
+  <span class="nav-progress" id="navProgress"></span>
+</header>
+
+<main id="top">
+
+  <div class="wrap hero">
+    <div class="hero-grid">
+      <div>
+        <div class="badge"><span class="dot"></span>V2.4 · Web 后台 · 移动端 · 高德地图</div>
+        <h1>一个后台，一张地图，<br><span class="grad">管好一个商会</span></h1>
+        <p class="lede">
+          商会通把多层级商会、会员与企业档案、入会审批和一张高德地图
+          收进同一套系统：会员在手机上提交入会、查看商会地图；
+          <strong>会长和秘书在后台审批、管成员、发公告。</strong>
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="http://47.112.24.248:10090/index.html" target="_blank" rel="noopener">在线试用后台 <span class="arrow">↗</span></a>
+          <a class="btn" href="#features">看它能干什么</a>
+          <a class="btn" href="#start">怎么开始用</a>
+        </div>
+        <div class="hero-meta">
+          <span>商会是一棵树，支持上级下级</span>
+          <span>数据按商会隔离</span>
+          <span>入会必须走审批</span>
+        </div>
+      </div>
+
+      <div class="phone ui-dark hero-phone" id="heroPhone" aria-hidden="true">
+        <div class="phone-screen">
+          <div class="phone-notch"><span></span></div>
+          <div class="screen map-screen">
+            <div class="app-search">
+              <div class="app-search-tabs">
+                <span class="on">全部</span><span>商会</span><span>公司</span>
+              </div>
+              <div class="app-search-input"><span>&#128269;</span><span>搜索商会 / 公司</span></div>
+            </div>
+            <div class="app-map">
+              <div class="map" id="heroMap">
+                <div class="map-grid"></div>
+                <div class="road h a"></div>
+                <div class="road h b"></div>
+                <div class="road v a"></div>
+                <div class="road v b"></div>
+                <button class="pin chamber" tabindex="-1" style="--x:34%;--y:38%" data-pin="c1" aria-current="true"><span class="head"></span></button>
+                <button class="pin chamber" tabindex="-1" style="--x:71%;--y:60%" data-pin="c2"><span class="head"></span></button>
+                <button class="pin company" tabindex="-1" style="--x:55%;--y:28%" data-pin="e1"><span class="head"></span></button>
+                <button class="pin company" tabindex="-1" style="--x:22%;--y:72%" data-pin="e2"><span class="head"></span></button>
+                <div class="map-card" data-card="c1"><h4>深圳市商会</h4><p>&#128205; 深圳市南山区科技园 · 联系人 林海</p></div>
+                <div class="map-card" data-card="c2" hidden><h4>南山区商会</h4><p>&#128205; 深圳市南山区 · 联系人 周敏</p></div>
+                <div class="map-card" data-card="e1" hidden><h4>云创科技</h4><p>&#128205; 深圳市南山区 · 法定代表 李慧</p></div>
+                <div class="map-card" data-card="e2" hidden><h4>汇通物流</h4><p>&#128205; 深圳市宝安区 · 法定代表 王振</p></div>
+              </div>
+            </div>
+          </div>
+          <div class="tabbar">
+            <button role="tab" tabindex="-1" aria-selected="true"><svg class="tico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 22.4c-.9-1-6.1-7-6.1-12.4a6.1 6.1 0 0 1 12.2 0c0 5.4-5.2 11.4-6.1 12.4Zm0-14.6a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg>地图</button>
+            <button role="tab" tabindex="-1" aria-selected="false"><svg class="tico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.6 3.4h7.1l4.3 4.3v12.9H6.6z"/><path d="M13.7 3.4v4.3h4.3"/><path d="M9.8 12.4h4.4"/><path d="M12 15v4.2M9.9 17.1h4.2"/></svg>申请入会</button>
+            <button role="tab" tabindex="-1" aria-selected="false"><svg class="tico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="5.4" y="3.4" width="13.2" height="17.2" rx="2.6"/><path d="M8.8 9.2h6.4M8.8 12.4h6.4M8.8 15.6h4"/></svg>备忘录</button>
+            <button role="tab" tabindex="-1" aria-selected="false"><svg class="tico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5.6 20.6 7.3 14h9.4l1.7 6.6z"/></svg>我的</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 各节按后续任务填入 -->
+  <section id="overview">
+    <div class="wrap">
+      <p class="kicker">全景</p>
+      <h2>两端，一件事</h2>
+      <p class="sub">会员在手机上提交和查看，会长和秘书在后台审批和管理 —— 两边看的是同一套数据。</p>
+
+      <div class="flow reveal">
+        <div class="node">
+          <h4>会员手机端</h4>
+          <p>提交入会 · 看商会地图 · 记备忘录</p>
+        </div>
+        <div class="arrow"><span class="glyph">⇄</span><span>同一套数据与权限</span></div>
+        <div class="node">
+          <h4>会长 / 秘书后台</h4>
+          <p>审批入会 · 管成员与企业 · 发公告</p>
+        </div>
+      </div>
+
+      <div class="principles">
+        <div class="pcard reveal">
+          <span class="n">01</span>
+          <h4>商会是一棵树</h4>
+          <p>每个商会都有上级商会；省/市/区、会长、秘书长、各级年费各自独立。</p>
+        </div>
+        <div class="pcard reveal">
+          <span class="n">02</span>
+          <h4>数据按商会隔离</h4>
+          <p>会长和秘书只看得见自己商会的人；换成别的商会，系统根本不会把数据端出来。</p>
+        </div>
+        <div class="pcard reveal">
+          <span class="n">03</span>
+          <h4>入会必须走审批</h4>
+          <p>申请要人批；批准的那一刻才授予角色、才建立企业关联。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section id="features">
+    <div class="wrap">
+      <p class="kicker">能力</p>
+      <h2>它替你解决的那些小事</h2>
+      <p class="sub">每一条都是系统里现在就能用的。</p>
+
+      <div class="grid">
+        <div class="card reveal">
+          <div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s7-6.2 7-11a7 7 0 1 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/></svg></div>
+          <h3>商会地图</h3>
+          <p>高德底图，商会 / 企业 / 会员三类标记。默认显示附近的公司（游客 20 公里、会员 50 公里），也能只看我加入的商会，还能按行业筛。</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/></svg></div>
+          <h3>入会申请与审批</h3>
+          <p>申请人在 app 里填表提交，会长或秘书在后台批；批准时顺手授予角色。</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0"/><path d="M16 11h5M18.5 8.5v5"/></svg></div>
+          <h3>成员与企业档案</h3>
+          <p>会员档案记身份、企业、职务、联系方式；企业档案记信用代码、营业执照、经营范围、行业。</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="6" height="4" rx="1"/><rect x="14" y="4" width="7" height="4" rx="1"/><rect x="14" y="15" width="7" height="4" rx="1"/><path d="M6 8v9a2 2 0 0 0 2 2h6"/></svg></div>
+          <h3>行业分类</h3>
+          <p>两级行业树，可增、可删、可启停；地图筛选和成员档案共用同一套分类。</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 13 6 9z"/><path d="M10 18a2 2 0 0 0 4 0"/></svg></div>
+          <h3>公告与备忘录</h3>
+          <p>商会公告发布后进 app；备忘录挂在人 / 企业 / 商会下面。</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="ico"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.4-3 7.6-7 9-4-1.4-7-4.6-7-9V6z"/><path d="M9.4 12l1.9 1.9 3.5-3.6"/></svg></div>
+          <h3>角色权限</h3>
+          <p>按商会授权的角色体系；除了五个固定角色，还能自建角色、逐项勾权限。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section id="admin">
+    <div class="wrap">
+      <p class="kicker">后台</p>
+      <h2>后台长这样</h2>
+      <p class="sub">左边是全部菜单，点一下看它的列表页 —— 列名和筛选项都取自真实页面。</p>
+
+      <div class="console reveal ui-dark">
+        <div class="console-bar">
+          <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          <span class="addr">商会通管理系统</span>
+        </div>
+        <div class="console-body">
+          <div class="console-side" id="consoleSide" role="tablist" aria-label="后台菜单">
+            <button role="tab" aria-selected="true">商会管理</button>
+            <button role="tab" aria-selected="false">成员管理</button>
+            <button role="tab" aria-selected="false">入会审批</button>
+            <button role="tab" aria-selected="false">行业管理</button>
+            <button role="tab" aria-selected="false">角色权限</button>
+            <button role="tab" aria-selected="false">公告管理</button>
+            <button role="tab" aria-selected="false">商会地图</button>
+            <button role="tab" aria-selected="false">备忘录</button>
+          </div>
+
+          <div class="console-main" id="consoleMain">
+            <div class="console-page" role="tabpanel">
+              <h3>商会管理</h3>
+              <div class="filters"><span class="on">全部</span><span>启用</span><span>停用</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>商会名称</th><th>商会编码</th><th>上级商会</th><th>所在地区</th><th>会长</th><th>状态</th></tr></thead>
+                  <tbody>
+                    <tr><td>广东省总商会</td><td>GD-001</td><td>—</td><td>广东省广州市</td><td>陈立</td><td><span class="tag ok">启用</span></td></tr>
+                    <tr><td>深圳市商会</td><td>GD-002</td><td>广东省总商会</td><td>广东省深圳市</td><td>林海</td><td><span class="tag ok">启用</span></td></tr>
+                    <tr><td>南山区商会</td><td>GD-003</td><td>深圳市商会</td><td>广东省深圳市南山区</td><td>周敏</td><td><span class="tag off">停用</span></td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="console-page" role="tabpanel" hidden>
+              <h3>成员管理</h3>
+              <div class="filters"><span class="on">全部</span><span>会员</span><span>游客</span><span>按商会</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>姓名</th><th>成员身份</th><th>所属商会</th><th>企业</th><th>职务</th><th>手机</th></tr></thead>
+                  <tbody>
+                    <tr><td>李慧</td><td><span class="tag ok">正式会员</span></td><td>深圳市商会</td><td>云创科技</td><td>总经理</td><td>138****6621</td></tr>
+                    <tr><td>王振</td><td><span class="tag off">游客</span></td><td>深圳市商会</td><td>汇通物流</td><td>业务经理</td><td>139****3180</td></tr>
+                    <tr><td>陈曦</td><td><span class="tag ok">正式会员</span></td><td>南山区商会</td><td>微光设计</td><td>设计总监</td><td>137****9042</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="console-page" role="tabpanel" hidden>
+              <h3>入会审批</h3>
+              <div class="filters"><span class="on">待审批</span><span>已审批</span><span>驳回</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>申请人</th><th>申请商会</th><th>企业名称</th><th>提交时间</th><th>状态</th><th>操作</th></tr></thead>
+                  <tbody>
+                    <tr><td>张伟</td><td>深圳市商会</td><td>恒益贸易</td><td>10-12 09:20</td><td><span class="tag wait">待审批</span></td><td>通过 · 驳回 · 退回</td></tr>
+                    <tr><td>刘洋</td><td>深圳市商会</td><td>蓝川电子</td><td>10-11 15:04</td><td><span class="tag ok">已通过</span></td><td>—</td></tr>
+                    <tr><td>赵凯</td><td>南山区商会</td><td>星野文化</td><td>10-10 11:37</td><td><span class="tag off">已退回</span></td><td>—</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="console-page" role="tabpanel" hidden>
+              <h3>行业管理</h3>
+              <ul class="tree">
+                <li><b>制造业</b>
+                  <ul><li>电子制造</li><li>机械制造</li></ul>
+                </li>
+                <li><b>信息技术</b>
+                  <ul><li>软件开发</li><li>数据服务</li></ul>
+                </li>
+                <li><b>商贸服务</b>
+                  <ul><li>批发</li><li>零售</li></ul>
+                </li>
+              </ul>
+            </div>
+
+            <div class="console-page" role="tabpanel" hidden>
+              <h3>角色权限</h3>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
+                <ul class="tree">
+                  <li><b>超级管理员</b></li>
+                  <li><b>会长</b></li>
+                  <li><b>秘书</b></li>
+                  <li><b>正式会员</b></li>
+                  <li><b>游客</b></li>
+                </ul>
+                <ul class="tree">
+                  <li><b>成员</b>
+                    <ul><li>查看本商会</li><li>指派角色</li><li>移除成员</li></ul>
+                  </li>
+                  <li><b>入会审批</b>
+                    <ul><li>查看本商会</li><li>审批入会</li></ul>
+                  </li>
+                  <li><b>行业</b>
+                    <ul><li>行业维护</li></ul>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="console-page" role="tabpanel" hidden>
+              <h3>公告管理</h3>
+              <div class="filters"><span class="on">全部</span><span>草稿</span><span>已发布</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>标题</th><th>类型</th><th>状态</th><th>发布人</th><th>发布时间</th></tr></thead>
+                  <tbody>
+                    <tr><td>2026 年度会费缴纳通知</td><td>通知</td><td><span class="tag ok">已发布</span></td><td>林海</td><td>10-09 10:12</td></tr>
+                    <tr><td>第三季度理事会议纪要</td><td>纪要</td><td><span class="tag off">草稿</span></td><td>周敏</td><td>10-08 16:40</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="console-page" role="tabpanel" hidden>
+              <h3>商会地图</h3>
+              <div class="filters"><span class="on">全部</span><span>制造业</span><span>信息技术</span><span>商贸服务</span></div>
+              <div class="map" style="height:200px">
+                <div class="map-grid"></div>
+                <div class="road h a"></div>
+                <div class="road h b"></div>
+                <div class="road v a"></div>
+                <div class="road v b"></div>
+                <span class="pin chamber" style="--x:31%;--y:36%"><span class="head"></span></span>
+                <span class="pin chamber" style="--x:69%;--y:55%"><span class="head"></span></span>
+                <span class="pin chamber" style="--x:50%;--y:78%"><span class="head"></span></span>
+                <span class="pin company" style="--x:44%;--y:22%"><span class="head"></span></span>
+                <span class="pin company" style="--x:80%;--y:30%"><span class="head"></span></span>
+              </div>
+            </div>
+
+            <div class="console-page" role="tabpanel" hidden>
+              <h3>备忘录</h3>
+              <div class="filters"><span class="on">全部</span><span>我的</span><span>本商会</span></div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>标题</th><th>所属商会</th><th>相关企业</th><th>记录时间</th></tr></thead>
+                  <tbody>
+                    <tr><td>拜访汇通物流纪要</td><td>深圳市商会</td><td>汇通物流</td><td>10-12 14:05</td></tr>
+                    <tr><td>年费催缴跟进</td><td>深圳市商会</td><td>恒益贸易</td><td>10-11 09:30</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="console-note">
+        <div class="card reveal">
+          <h3>筛选条</h3>
+          <p>每个列表页顶上一排按钮，切的就是它自己的状态或身份。</p>
+        </div>
+        <div class="card reveal">
+          <h3>菜单按角色显隐</h3>
+          <p>会长和秘书看不到「商会管理」「角色权限」；那是超级管理员的菜单。</p>
+        </div>
+        <div class="card reveal">
+          <h3>状态用颜色说话</h3>
+          <p>启用、停用、待审批、已通过各有自己的颜色，扫一眼就能挑出要处理的。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section id="phone">
+    <div class="wrap">
+      <p class="kicker">手机端</p>
+      <h2>app 里就这四屏</h2>
+      <p class="sub">底栏四个标签，点哪个看哪个 —— 屏幕里就是 app 里的样子。</p>
+
+      <div class="demo-two reveal">
+        <div class="phone ui-dark">
+          <div class="phone-screen">
+            <div class="phone-notch"><span></span></div>
+
+            <!-- ===== 一、地图 ===== -->
+            <div class="screen map-screen" id="screenMap" role="tabpanel">
+              <div class="app-search">
+                <div class="app-search-tabs">
+                  <span class="on">全部</span><span>商会</span><span>公司</span>
+                </div>
+                <div class="app-search-input"><span>&#128269;</span><span>搜索商会 / 公司</span></div>
+              </div>
+              <div class="app-map">
+                <div class="map" id="phoneMap">
+                  <div class="map-grid"></div>
+                  <div class="road h a"></div><div class="road h b"></div>
+                  <div class="road v a"></div><div class="road v b"></div>
+
+                  <div class="app-actions">
+                    <div><span class="ico">&#127991;</span>名称</div>
+                    <div><span class="ico">&#127919;</span>选点</div>
+                    <div><span class="ico">&#128205;</span>定位</div>
+                  </div>
+
+                  <button class="pin chamber" aria-label="深圳市商会" data-kind="chamber" style="--x:26%;--y:30%" aria-current="true"><span class="head"></span></button>
+                  <button class="pin chamber" aria-label="南山区商会" data-kind="chamber" style="--x:62%;--y:22%"><span class="head"></span></button>
+                  <button class="pin company" aria-label="云创科技" data-kind="company" style="--x:44%;--y:52%"><span class="head"></span></button>
+                  <button class="pin company" aria-label="汇通物流" data-kind="company" style="--x:74%;--y:60%"><span class="head"></span></button>
+                  <button class="pin company" aria-label="微光设计" data-kind="company" style="--x:20%;--y:68%"><span class="head"></span></button>
+
+                  <!-- 标记详情弹窗：照 index.vue 的 popup-card 分商会 / 公司两枚 -->
+                  <div class="app-popup" data-popup="chamber">
+                    <span class="badge">&#127970; 商会信息</span>
+                    <h4>深圳市商会</h4>
+                    <div class="row"><b>地址</b>深圳市南山区科技园</div>
+                    <div class="row"><b>联系人</b>林海</div>
+                    <div class="row"><b>电话</b>0755-8888 0001</div>
+                    <div class="row"><b>备忘录</b>拜访汇通物流纪要</div>
+                    <div class="acts"><span class="ghost">&#128203; 详情</span><span class="solid">&#128222; 拨打电话</span></div>
+                  </div>
+                  <div class="app-popup" data-popup="company" hidden>
+                    <span class="badge">&#127970; 公司信息</span>
+                    <h4>云创科技</h4>
+                    <div class="row"><b>地址</b>深圳市南山区科技园</div>
+                    <div class="row"><b>法定代表</b>李慧</div>
+                    <div class="row"><b>电话</b>0755-8888 0002</div>
+                    <div class="row"><b>行业</b>软件开发</div>
+                    <div class="acts"><span class="ghost">&#128203; 详情</span><span class="solid">&#128222; 拨打电话</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===== 二、申请入会 ===== -->
+            <div class="screen" id="screenApply" role="tabpanel" hidden>
+              <div class="app-tabs"><span class="on">提交申请</span><span>我的记录</span></div>
+              <div class="app-form">
+                <div><span class="app-label">申请商会<i>*</i></span><div class="app-input">深圳市商会</div></div>
+                <div><span class="app-label">姓名<i>*</i></span><div class="app-input">张伟</div></div>
+                <div><span class="app-label">性别</span><div class="app-input">男</div></div>
+                <div><span class="app-label">企业名称<i>*</i></span><div class="app-input">恒益贸易有限公司</div></div>
+                <div><span class="app-label">职位</span><div class="app-input">总经理</div></div>
+                <div><span class="app-label">手机号<i>*</i></span><div class="app-input readonly">135 0011 2233</div></div>
+                <div><span class="app-label">企业电话</span><div class="app-input blank">请输入企业电话</div></div>
+                <div><span class="app-label">微信号</span><div class="app-input blank">请输入微信号</div></div>
+                <div><span class="app-label">企业地址</span><div class="app-input">深圳市南山区科技园</div></div>
+                <div><span class="app-label">企业网站</span><div class="app-input blank">请输入企业网站</div></div>
+                <div>
+                  <span class="app-label">所属行业<i>*</i></span>
+                  <div class="app-tags"><span>批发</span><span>零售</span></div>
+                </div>
+                <div class="app-form-acts">
+                  <span class="line">保存</span><span class="fill">提交</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===== 三、备忘录 ===== -->
+            <div class="screen" id="screenMemo" role="tabpanel" hidden>
+              <div class="app-topbar">
+                <span class="count">共 3 条备忘录</span>
+                <span class="add">&#65291; 新增备忘录</span>
+              </div>
+              <div class="app-memo-list">
+                <div class="app-memo">
+                  <div class="t">拜访汇通物流纪要</div>
+                  <div class="chips"><span>深圳市商会</span><span class="co">汇通物流</span></div>
+                  <div class="body">聊了三季度仓储扩容的事，对接人王经理，月底前给报价。</div>
+                  <div class="foot"><span>10-12 14:05</span><span class="acts"><span>编辑</span><span class="danger">删除</span></span></div>
+                </div>
+                <div class="app-memo">
+                  <div class="t">年费催缴跟进</div>
+                  <div class="chips"><span>深圳市商会</span><span class="co">恒益贸易</span></div>
+                  <div class="body">已电话通知财务，对方答复本周内走完流程。</div>
+                  <div class="foot"><span>10-11 09:30</span><span class="acts"><span>编辑</span><span class="danger">删除</span></span></div>
+                </div>
+                <div class="app-memo">
+                  <div class="t">第三季度理事会议要点</div>
+                  <div class="chips"><span>深圳市商会</span></div>
+                  <div class="body">新增两家理事单位，会费标准维持不变。</div>
+                  <div class="foot"><span>10-09 16:40</span><span class="acts"><span>编辑</span><span class="danger">删除</span></span></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===== 四、我的 ===== -->
+            <div class="screen" id="screenProfile" role="tabpanel" hidden>
+              <div class="app-profile-head">
+                <div class="app-avatar">张</div>
+                <div>
+                  <div class="name">张伟</div>
+                  <div class="pnum">135 0011 2233</div>
+                  <div class="co">&#127970; 恒益贸易有限公司</div>
+                </div>
+              </div>
+
+              <div class="app-sec">
+                <div class="h">我的商会</div>
+                <div class="app-card">
+                  <div class="row now"><span class="ico">&#127970;</span>深圳市商会<span class="tag">当前</span></div>
+                  <div class="row"><span class="ico">&#127970;</span>南山区商会<span class="arrow">&#10095;</span></div>
+                </div>
+              </div>
+
+              <div class="app-sec">
+                <div class="h">快捷入口</div>
+                <div class="app-card">
+                  <div class="row"><span class="ico">&#128196;</span>入会申请<span class="arrow">&#10095;</span></div>
+                  <div class="row"><span class="ico">&#128221;</span>备忘录<span class="arrow">&#10095;</span></div>
+                  <div class="row"><span class="ico">&#127970;</span>公司管理员申请<span class="arrow">&#10095;</span></div>
+                  <div class="row"><span class="ico">&#127757;</span>商会地图<span class="arrow">&#10095;</span></div>
+                </div>
+              </div>
+
+              <div class="app-sec">
+                <div class="h">账户设置</div>
+                <div class="app-card">
+                  <div class="row"><span class="ico">&#128272;</span>修改密码<span class="arrow">&#10095;</span></div>
+                </div>
+              </div>
+
+              <div class="app-logout">退出登录</div>
+            </div>
+
+            <!-- 底栏（pages.json tabBar） -->
+            <div class="tabbar" id="phoneTabbar" role="tablist" aria-label="手机端页面">
+              <button role="tab" aria-selected="true"><svg class="tico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 22.4c-.9-1-6.1-7-6.1-12.4a6.1 6.1 0 0 1 12.2 0c0 5.4-5.2 11.4-6.1 12.4Zm0-14.6a2.2 2.2 0 1 0 0 4.4 2.2 2.2 0 0 0 0-4.4Z"/></svg>地图</button>
+              <button role="tab" aria-selected="false"><svg class="tico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.6 3.4h7.1l4.3 4.3v12.9H6.6z"/><path d="M13.7 3.4v4.3h4.3"/><path d="M9.8 12.4h4.4"/><path d="M12 15v4.2M9.9 17.1h4.2"/></svg>申请入会</button>
+              <button role="tab" aria-selected="false"><svg class="tico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="5.4" y="3.4" width="13.2" height="17.2" rx="2.6"/><path d="M8.8 9.2h6.4M8.8 12.4h6.4M8.8 15.6h4"/></svg>备忘录</button>
+              <button role="tab" aria-selected="false"><svg class="tico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5.6 20.6 7.3 14h9.4l1.7 6.6z"/></svg>我的</button>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card reveal">
+            <h3>地图不止是地图</h3>
+            <p>搜索卡分「全部 / 商会 / 公司」三段；右上角三个钮管「名称 / 选点 / 定位」；点标记弹出商会或公司的详情卡。</p>
+          </div>
+          <div class="card reveal">
+            <h3>申请和记录在同一屏</h3>
+            <p>「提交申请」和「我的记录」是页内两个 Tab。申请单先存草稿，再提交；退回和驳回都会写明原因。</p>
+          </div>
+          <div class="card reveal">
+            <h3>备忘录挂在关系上</h3>
+            <p>一条备忘录同时关联商会、公司和时间，所以在地图弹窗里也能直接看到最新两条。</p>
+          </div>
+          <div class="card reveal">
+            <h3>一个账号，多个商会</h3>
+            <p>「我的」里列出你加入的每个商会，点一下切换当前商会，管理入口只对有权限的人出现。</p>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="subhead">第一次用，三步</h3>
+      <ol class="steps">
+        <li class="reveal">
+          <h4>登录</h4>
+          <p>手机号验证码即登录，新号码自动注册成游客；也能用密码加图形验证码登录。</p>
+        </li>
+        <li class="reveal">
+          <h4>看地图</h4>
+          <p>不登录就能看地图和商会详情；登录后可搜索、可按类别筛选。</p>
+        </li>
+        <li class="reveal">
+          <h4>提交入会</h4>
+          <p>选商会、填企业信息，可以先存草稿；提交后等会长或秘书在后台批。</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+  <section id="roles">
+    <div class="wrap">
+      <p class="kicker">角色与权限</p>
+      <h2>谁看得见谁的数据</h2>
+      <p class="sub">五个角色，两级管辖。不是自己商会的人和事，系统根本不会端出来。</p>
+
+      <div class="table-wrap reveal">
+        <table>
+          <thead><tr><th>角色</th><th>管辖范围</th><th>能做什么</th></tr></thead>
+          <tbody>
+            <tr><td>超级管理员</td><td>全部商会</td><td>管商会、管行业、配权限，以及所有商会的审批</td></tr>
+            <tr><td>会长</td><td>本商会</td><td>管成员、审批入会、发公告</td></tr>
+            <tr><td>秘书</td><td>本商会</td><td>管成员、日常审批、发公告</td></tr>
+            <tr><td>正式会员</td><td>本商会</td><td>查看本商会成员、使用地图</td></tr>
+            <tr><td>游客</td><td>—</td><td>浏览地图、提交入会申请</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="subhead">一张申请单要走的路</h3>
+      <div class="fsm reveal">
+        <span class="st neutral">草稿</span>
+        <span class="ar">提交 ──▶</span>
+        <span class="st">待审批</span>
+        <span class="ar">批准 ──▶</span>
+        <span class="st done">已通过</span>
+      </div>
+      <div class="fsm reveal">
+        <span class="st">待审批</span>
+        <span class="ar alt">退回 ──▶</span>
+        <span class="st">已退回</span>
+        <span class="ar alt">重新提交 ──▶</span>
+        <span class="st">待审批</span>
+      </div>
+      <div class="fsm reveal">
+        <span class="st">待审批</span>
+        <span class="ar alt">驳回 ──▶</span>
+        <span class="st bad">已驳回</span>
+        <span class="ar" style="padding-left:24px">撤回 ──▶</span>
+        <span class="st neutral">已撤回</span>
+        <span class="ar alt">重新提交 ──▶</span>
+        <span class="st">待审批</span>
+      </div>
+      <p class="sub" style="margin-top:14px">
+        批准的那一刻做两件事：<strong>授予角色</strong>、<strong>建立企业关联</strong>。
+        退回和驳回都要填原因，申请人看得见。
+      </p>
+
+      <h3 class="subhead">后台里勾的就是这些</h3>
+      <p class="sub" style="margin-bottom:12px">
+        一个角色能勾的项就是下面这些。勾上就看得见、点得动；没勾的，整个入口都不出现。
+      </p>
+      <div class="quote">
+        <b>商会</b>：查看 · 新建 · 编辑 · 删除<br>
+        <b>成员</b>：查看本商会 · 查看全部 · 编辑资料 · <b>指派角色</b> · 移除成员<br>
+        <b>入会审批</b>：查看全部 · 查看本商会 · <b>审批入会</b><br>
+        <b>行业 / 角色 / 公告</b>：<b>行业维护</b> · <b>角色配置</b> · <b>公告发布</b><br>
+        <b>企业档案</b>：查看 · 新增 · 编辑 · 删除<br>
+        <b>备忘录</b>：查看 · 新增 · 编辑 · 删除
+      </div>
+    </div>
+  </section>
+  <section id="start">
+    <div class="wrap">
+      <p class="kicker">怎么开始用</p>
+      <h2>三步就能试</h2>
+      <p class="sub">不用装任何东西，浏览器打开就能看后台。</p>
+
+      <div class="secure">
+        <div class="card reveal">
+          <h3>Web 后台</h3>
+          <p>会长和秘书用的那一端：审批入会、管成员与企业、发公告、配权限。</p>
+          <p class="trial-note">已经开好一台，随时可访问：</p>
+          <a class="trial-addr" href="http://47.112.24.248:10090/index.html" target="_blank" rel="noopener">http://47.112.24.248:10090/<wbr>index.html</a>
+          <a class="btn" href="#admin">先看看里面长什么样</a>
+        </div>
+        <div class="card reveal">
+          <h3>手机端</h3>
+          <p>会员用的那一端：看商会地图、提交入会申请、记备忘录。微信小程序、H5、安卓都有。</p>
+          <a class="btn" href="#phone">先看看手机端</a>
+        </div>
+      </div>
+
+      <h3 class="subhead">打开之后，三步</h3>
+      <ol class="steps">
+        <li class="reveal">
+          <h4>打开后台</h4>
+          <p>点上面的地址，浏览器直接就进。不用注册，不用等审核。</p>
+        </li>
+        <li class="reveal">
+          <h4>登录</h4>
+          <p>手机号加验证码就能进；也可以走账号密码加图形验证码。</p>
+        </li>
+        <li class="reveal">
+          <h4>提交一份入会申请</h4>
+          <p>选商会、填企业信息、提交，再去审批页把它批掉 —— 一条完整链路就走完了。</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+  <section id="limits">
+    <div class="wrap">
+      <p class="kicker">边界</p>
+      <h2>它不做什么</h2>
+      <p class="sub">下面这些是真的做不到，不是「暂未支持」。</p>
+
+      <div class="limits">
+        <div class="limit reveal"><span class="tag">地图</span><p>地图用的是高德底图，要单独开通接入；没开通就只有列表，没有地图。</p></div>
+        <div class="limit reveal"><span class="tag">审批</span><p>入会是<strong>单级审批</strong>（会长 / 秘书 / 超管任一即可），不是多级会签流程。</p></div>
+        <div class="limit reveal"><span class="tag">权限</span><p>隔离粒度是<strong>商会级</strong>，不是字段级；同一商会内的成员默认可互看档案。</p></div>
+        <div class="limit reveal"><span class="tag">登录</span><p>手机号验证码登录要接短信通道；没接短信时走账号密码 + 图形验证码。</p></div>
+        <div class="limit reveal"><span class="tag">备忘录</span><p>备忘录是挂给人 / 企业 / 商会的记录，<strong>不是</strong>多人协同文档。</p></div>
+        <div class="limit reveal"><span class="tag">多商会</span><p>一个账号可属于多个商会，但 app 同一时刻只在<strong>一个</strong>商会里活动。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq">
+    <div class="wrap">
+      <p class="kicker">常见问题</p>
+      <h2>别人最常问的几句</h2>
+
+      <details><summary>一定要装 app 吗？</summary><div class="ans"><p>不。游客不登录也能看地图和商会详情；只有提交入会申请需要登录。</p></div></details>
+      <details><summary>地图上的公司从哪来？</summary><div class="ans"><p>来自企业档案。地图默认显示附近的公司 —— 游客 20 公里、会员 50 公里；也能只看我加入的商会。</p></div></details>
+      <details><summary>批准入会之后发生了什么？</summary><div class="ans"><p>授予角色 + 关联企业，申请人从游客变成会员。</p></div></details>
+      <details><summary>看不见别的商会的数据？</summary><div class="ans"><p>按商会隔离。不是自己商会的成员和企业，系统根本不会端出来，不是界面上藏起来。</p></div></details>
+      <details><summary>能自己加角色吗？</summary><div class="ans"><p>能。后台「角色权限」里新增角色，然后勾权限树。</p></div></details>
+      <details><summary>一个手机号能进多个商会吗？</summary><div class="ans"><p>能。登录后在个人中心切换当前商会。</p></div></details>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-grid">
+      <div>
+        <h5>商会通</h5>
+        <p style="margin:0;font-size:13.5px;color:var(--fg-dim)">Chamber Management System<br>多层级商会、会员企业与入会审批</p>
+      </div>
+      <div>
+        <h5>两端</h5>
+        <ul>
+          <li>Web 后台</li>
+          <li>移动端 App</li>
+        </ul>
+      </div>
+      <div>
+        <h5>在线试用</h5>
+        <ul>
+          <li class="addr"><a href="http://47.112.24.248:10090/index.html" target="_blank" rel="noopener">http://47.112.24.248:10090/index.html</a></li>
+          <li><span>Web 后台，直接打开就能登</span></li>
+        </ul>
+      </div>
+      <div>
+        <h5>本页</h5>
+        <ul>
+          <li><a href="#overview">全景</a></li>
+          <li><a href="#features">能力</a></li>
+          <li><a href="#admin">后台</a></li>
+          <li><a href="#phone">手机端</a></li>
+          <li><a href="#roles">角色与权限</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span>商会通 V2.4</span>
+      <span>2026</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- 导航：滚动加边、当前节高亮、进度条 ---------- */
+  var nav = document.getElementById("nav");
+  function onScroll() { nav.classList.toggle("stuck", window.scrollY > 8); }
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll(".nav-links a"));
+  var navPill = document.getElementById("navPill");
+  var navLinksBox = document.getElementById("navLinks");
+  var progress = document.getElementById("navProgress");
+
+  function placePill() {
+    if (!navPill || !navLinksBox) return;
+    var active = navLinksBox.querySelector("a.active");
+    if (!active) { navLinksBox.classList.remove("js-pill"); return; }
+    navLinksBox.classList.add("js-pill");
+    navPill.style.width = active.offsetWidth + "px";
+    navPill.style.transform = "translateX(" + active.offsetLeft + "px)";
+  }
+
+  var sections = navLinks
+    .map(function (a) { return document.querySelector(a.getAttribute("href")); })
+    .filter(Boolean);
+
+  if ("IntersectionObserver" in window) {
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        navLinks.forEach(function (a) {
+          a.classList.toggle("active", a.getAttribute("href") === "#" + e.target.id);
+        });
+        placePill();
+      });
+    }, { rootMargin: "-84px 0px -70% 0px", threshold: 0 });
+    sections.forEach(function (s) { spy.observe(s); });
+
+    var revealer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e, i) {
+        if (!e.isIntersecting) return;
+        var el = e.target;
+        setTimeout(function () { el.classList.add("in"); }, (i % 4) * 70);
+        revealer.unobserve(el);
+      });
+    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.12 });
+    document.querySelectorAll(".reveal").forEach(function (el) { revealer.observe(el); });
+  } else {
+    document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("in"); });
+  }
+
+  /* ---------- 滚动：进度条 + hero 视差 ---------- */
+  var heroPhone = document.getElementById("heroPhone");
+  var glow = document.getElementById("glow");
+  var heroBox = document.querySelector(".hero");
+  var wideEnough = window.matchMedia ? window.matchMedia("(min-width: 941px)") : null;
+  var queued = false;
+
+  function drawScroll() {
+    queued = false;
+    var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var span = document.documentElement.scrollHeight - window.innerHeight;
+    if (progress) {
+      progress.style.transform = "scaleX(" + (span > 0 ? Math.min(1, y / span) : 0).toFixed(4) + ")";
+    }
+    var trail = (reduced || (wideEnough && !wideEnough.matches)) ? 0
+              : Math.min(y, heroBox ? heroBox.offsetHeight : 0);
+    if (heroPhone) heroPhone.style.transform = trail ? "translate3d(0," + (trail * 0.08).toFixed(2) + "px,0)" : "";
+    if (glow) glow.style.transform = trail ? "translate3d(0," + (trail * 0.03).toFixed(2) + "px,0)" : "";
+  }
+  function queueScroll() {
+    if (queued) return;
+    queued = true;
+    window.requestAnimationFrame(drawScroll);
+  }
+  window.addEventListener("scroll", queueScroll, { passive: true });
+  window.addEventListener("resize", function () { placePill(); queueScroll(); });
+  placePill();
+  drawScroll();
+
+  /* ---------- 装饰手机：每 3.5 秒换一个图钉 ---------- */
+  var heroMap = document.getElementById("heroMap");
+  if (heroMap && !reduced) {
+    var heroPins = Array.prototype.slice.call(heroMap.querySelectorAll(".pin"));
+    var heroCards = Array.prototype.slice.call(heroMap.querySelectorAll(".map-card"));
+    var heroAt = 0;
+    setInterval(function () {
+      if (document.hidden) return;
+      heroAt = (heroAt + 1) % heroPins.length;
+      heroPins.forEach(function (p, i) {
+        if (i === heroAt) p.setAttribute("aria-current", "true"); else p.removeAttribute("aria-current");
+      });
+      var key = heroPins[heroAt].getAttribute("data-pin");
+      heroCards.forEach(function (c) { c.hidden = c.getAttribute("data-card") !== key; });
+    }, 3500);
+  }
+
+  /* ---------- 后台控制台：切换菜单 ---------- */
+  var side = document.getElementById("consoleSide");
+  var main = document.getElementById("consoleMain");
+  if (side && main) {
+    var tabs = Array.prototype.slice.call(side.querySelectorAll('[role="tab"]'));
+    var pages = Array.prototype.slice.call(main.querySelectorAll('[role="tabpanel"]'));
+
+    function showPage(i) {
+      if (i < 0 || i >= tabs.length) return;
+      tabs.forEach(function (t, k) { t.setAttribute("aria-selected", k === i ? "true" : "false"); });
+      pages.forEach(function (p, k) {
+        if (k === i) {
+          p.removeAttribute("hidden");
+          if (!reduced) {
+            p.classList.remove("fade-in");
+            void p.offsetWidth;   // 重排一次，动画才会重新播
+            p.classList.add("fade-in");
+          }
+        } else {
+          p.setAttribute("hidden", "");
+        }
+      });
+    }
+
+    side.addEventListener("click", function (e) {
+      var tab = e.target.closest ? e.target.closest('[role="tab"]') : null;
+      if (!tab || tabs.indexOf(tab) === -1) return;
+      showPage(tabs.indexOf(tab));
+    });
+
+    side.addEventListener("keydown", function (e) {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      var tab = e.target.closest ? e.target.closest('[role="tab"]') : null;
+      if (!tab) return;
+      var i = tabs.indexOf(tab);
+      var next = e.key === "ArrowRight" ? (i + 1) % tabs.length : (i - 1 + tabs.length) % tabs.length;
+      e.preventDefault();
+      showPage(next);
+      tabs[next].focus();
+    });
+  }
+
+  /* ---------- 手机四屏：底栏切换 ---------- */
+  var phoneTabbar = document.getElementById("phoneTabbar");
+  if (phoneTabbar) {
+    var phoneTabs = Array.prototype.slice.call(phoneTabbar.querySelectorAll('[role="tab"]'));
+    var phoneScreens = ["screenMap", "screenApply", "screenMemo", "screenProfile"]
+      .map(function (id) { return document.getElementById(id); });
+
+    function showScreen(i) {
+      if (i < 0 || i >= phoneTabs.length) return;
+      phoneTabs.forEach(function (t, k) { t.setAttribute("aria-selected", k === i ? "true" : "false"); });
+      phoneScreens.forEach(function (s, k) { if (s) s.hidden = k !== i; });
+    }
+
+    phoneTabbar.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest('[role="tab"]') : null;
+      if (!b) return;
+      showScreen(phoneTabs.indexOf(b));
+    });
+
+    phoneTabbar.addEventListener("keydown", function (e) {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      var b = e.target.closest ? e.target.closest('[role="tab"]') : null;
+      if (!b) return;
+      var i = phoneTabs.indexOf(b);
+      var next = e.key === "ArrowRight" ? (i + 1) % phoneTabs.length : (i - 1 + phoneTabs.length) % phoneTabs.length;
+      e.preventDefault();
+      showScreen(next);
+      phoneTabs[next].focus();
+    });
+  }
+
+  /* ---------- 手机地图：点图钉弹对应种类的详情卡 ----------
+     真实 app 里同一个弹窗组件按标记类型换内容（商会 / 公司），这里照做：
+     图钉带 data-kind，弹窗带 data-popup，同名的那张显示，其余隐藏。 */
+  var phoneMap = document.getElementById("phoneMap");
+  if (phoneMap) {
+    var pins = Array.prototype.slice.call(phoneMap.querySelectorAll(".pin"));
+    var popups = Array.prototype.slice.call(phoneMap.querySelectorAll("[data-popup]"));
+
+    function showPin(i) {
+      pins.forEach(function (p, j) {
+        if (j === i) p.setAttribute("aria-current", "true"); else p.removeAttribute("aria-current");
+      });
+      var kind = pins[i].getAttribute("data-kind");
+      popups.forEach(function (u) { u.hidden = u.getAttribute("data-popup") !== kind; });
+    }
+
+    phoneMap.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest(".pin") : null;
+      if (!b) return;
+      showPin(pins.indexOf(b));
+    });
+  }
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<!-- 静态默认 = 玻璃 · 浅色，和 theme.css / <meta color-scheme> 对齐。
+     theme.js 一执行就会按存储或系统偏好覆盖它们；脚本被关掉时页面也还有一套完整皮肤。 -->
+<html lang="zh-CN" data-skin="glass" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- 静态就写 only light：安卓自动暗色在解析阶段看到 `light dark` 就会接管，
+     等 JS 再改已经晚了。深色模式由 theme.css 自己画。 -->
+<meta name="color-scheme" content="only light">
+<title>AppGallery — 我做过的应用</title>
+<!-- 同步加载，且必须在样式表之前：它一执行就把 data-skin / data-theme 写到
+     <html> 上，赶在首帧之前，否则会先闪一套再跳。详见 assets/theme.js 顶部。 -->
+<script src="assets/theme.js"></script>
+<link rel="stylesheet" href="assets/theme.css">
+<link rel="stylesheet" href="assets/style.css">
+<!-- 皮肤版式最后加载：它把上面的骨架画成 03 粗野或 08 玻璃。 -->
+<link rel="stylesheet" href="assets/skin.css">
+<!-- .reveal 平时是 opacity:0，靠 app.js 打上 .in 才显形。脚本一旦没跑（关掉 JS、
+     或被拦），正文会整片停在透明态。这条 noscript 兜底。
+     必须放在样式表**之后**：两者选择器特异性相同，靠文档顺序决胜；
+     放前面的话 .reveal{opacity:0} 会盖掉它，等于没写。 -->
+<noscript><style>.reveal { opacity: 1; } [data-theme-toggle], [data-skin-toggle] { display: none; }</style></noscript>
+</head>
+<body data-page="home">
+
+<div class="bg-glow" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">App<span>Gallery</span></span>
+    </a>
+    <nav class="nav-links">
+      <a href="#works">项目</a>
+      <a href="https://github.com/zhoujunli" data-github-link>GitHub</a>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="切换明暗模式">◐</button>
+      <button class="theme-toggle skin-toggle" type="button" data-skin-toggle aria-label="切换皮肤">✳</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="hero-main reveal">
+      <div class="sticker">个人作品集 · 2026</div>
+      <div class="badge"><i aria-hidden="true"></i><span data-count>3</span> 个项目 · 持续更新</div>
+      <h1>我做过的应用，<br><span class="accent">都在这里。</span></h1>
+      <p class="hero-lede">点开任意一个，看它解决什么问题，然后下载安装包亲自试试。</p>
+    </div>
+    <aside class="hero-note reveal">
+      <p>点开任意一个，看它解决什么问题，然后下载安装包亲自试试。</p>
+      <div class="hero-count"><b data-count-pad>03</b><span>个项目 · 持续更新</span></div>
+    </aside>
+    <div class="stat-row reveal">
+      <div class="stat"><span>Projects</span><b data-count-pad>03</b></div>
+      <div class="stat"><span>Platforms</span><b data-platforms-count>05</b></div>
+      <div class="stat"><span>Updated</span><b>2026</b></div>
+    </div>
+  </section>
+
+  <div class="works-bar">
+    <h2>全部项目</h2>
+    <div class="filters" data-filters role="group" aria-label="按平台筛选"></div>
+  </div>
+
+  <noscript>
+    <p class="empty">项目列表由脚本从 projects.js 生成。这个浏览器没有运行 JavaScript，所以列表暂时是空的。</p>
+  </noscript>
+
+  <section id="works" class="grid" data-grid></section>
+
+  <div class="closing">
+    <p>三个项目，三种形态。<b>每一个都从真实的问题开始</b>，做完、上线，再收进这里。</p>
+  </div>
+</main>
+
+<footer class="wrap footer">
+  <span>© <span data-year>2026</span> Junli Zhou</span>
+  <a href="https://github.com/zhoujunli" data-github-link>GitHub ↗</a>
+</footer>
+
+<script src="projects.js"></script>
+<script src="assets/logic.js"></script>
+<script src="assets/preview.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

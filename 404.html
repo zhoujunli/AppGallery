@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<!-- 静态默认 = 玻璃 · 浅色，和 theme.css / <meta color-scheme> 对齐。
+     theme.js 一执行就会按存储或系统偏好覆盖它们；脚本被关掉时页面也还有一套完整皮肤。 -->
+<html lang="zh-CN" data-skin="glass" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="only light">
+<title>没找到这个页面 — AppGallery</title>
+<!-- 同步加载，且必须在样式表之前：它一执行就把 data-skin / data-theme 写到
+     <html> 上，赶在首帧之前，否则会先闪一套再跳。详见 assets/theme.js 顶部。 -->
+<script src="assets/theme.js"></script>
+<link rel="stylesheet" href="assets/theme.css">
+<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/skin.css">
+<!-- 同 index.html：.reveal 起始态是透明的，靠 app.js 打 .in 显形。
+     这条 noscript 兜「JS 整个没跑」，必须放在样式表之后才盖得住。 -->
+<noscript><style>.reveal { opacity: 1; } [data-theme-toggle], [data-skin-toggle] { display: none; }</style></noscript>
+</head>
+<body data-page="404">
+
+<div class="bg-glow" aria-hidden="true"></div>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="index.html">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">App<span>Gallery</span></span>
+    </a>
+    <nav class="nav-links">
+      <a href="index.html">项目</a>
+      <a href="https://github.com/zhoujunli" data-github-link>GitHub</a>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="切换明暗模式">◐</button>
+      <button class="theme-toggle skin-toggle" type="button" data-skin-toggle aria-label="切换皮肤">✳</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="centered">
+    <!-- 自动描边的断链。纯装饰 —— 旁边的文字才是信息本体，所以 aria-hidden。
+         pathLength="100" 把两条弧的长度归一化，省得去算实际周长；
+         动画本身在 style.css 里，用的还是 .reveal 那套「只声明 from 帧」。 -->
+    <svg class="lost reveal" viewBox="0 0 96 56" width="96" height="56"
+         fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+         aria-hidden="true">
+      <path class="lost-arc" pathLength="100" d="M34 16 H24 a12 12 0 0 0 0 24 h10"/>
+      <path class="lost-arc" pathLength="100" d="M62 16 h10 a12 12 0 0 1 0 24 h-10"/>
+      <path class="lost-gap" d="M42 28 h12"/>
+    </svg>
+    <h1 class="reveal">没找到这个页面</h1>
+    <p class="empty reveal">地址可能写错了，或者这个页面已经不在了。</p>
+    <a class="reveal" href="index.html">← 回到全部项目</a>
+  </section>
+</main>
+
+<footer class="wrap footer">
+  <span>© <span data-year>2026</span> Junli Zhou</span>
+</footer>
+
+<script src="assets/logic.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

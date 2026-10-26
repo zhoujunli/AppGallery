@@ -1,0 +1,1936 @@
+<!DOCTYPE html>
+<!-- 静态默认 = 玻璃 · 浅色，和 theme.css / <meta color-scheme> 对齐。
+     theme.js 一执行就会按存储或系统偏好覆盖它们；脚本被关掉时页面也还有一套完整皮肤。 -->
+<html lang="zh-CN" data-skin="glass" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClaudePocket — 把 Claude Code 装进兜里</title>
+<meta name="description" content="ClaudePocket 把手机变成 Mac 上 Claude Code 会话的远程终端：会话在电脑上活着，手机只是一块屏幕。">
+<meta name="color-scheme" content="only light">
+<!-- 同步加载，且必须在样式表之前：它一执行就把 data-skin / data-theme 写到
+     <html> 上，赶在首帧之前，否则会闪。详见 assets/theme.js 顶部。 -->
+<script src="../assets/theme.js"></script>
+<link rel="stylesheet" href="../assets/theme.css">
+<style>
+  /* 这一层只覆盖品牌色。底色、文字、描边、圆角、字体栈全部继承
+     ../assets/theme.css —— 和首页是同一套。theme.css 顶部点名了哪几个是
+     「可覆盖」的，改这里不会波及首页。 */
+  :root {
+    --accent: #6ee7b7;
+    --accent-dim: #2f6b57;
+    --accent-bg: #0f1a17;
+    /* 辉光取品牌色。位置留在下面 .bg-glow 那条规则里 —— 位置是这个页面的排布。 */
+    --glow-1: rgba(110, 231, 183, .10);
+    --glow-2: rgba(124, 196, 255, .07);
+    /* 导航栏的毛玻璃底。深色是半透明黑，浅色得换成半透明白。 */
+    --nav-bg: rgba(11, 13, 16, .78);
+  }
+
+  /* 浅色下的品牌色。薄荷绿留在白底上会糊，压深一档。 */
+  [data-theme="light"] {
+    --accent: #059669;
+    /* 眉标和行内代码只有 11–11.5px，品牌绿原样放在浅底上只有 3.5:1；
+       眉标、代码这类小字压深一档，大标题和按钮仍用上面的 --accent。 */
+    --accent-text: #0e7259;
+    --accent-dim: #a7f3d0;
+    --accent-bg: #ecfdf5;
+    --glow-1: rgba(16, 185, 129, .10);
+    --glow-2: rgba(37, 99, 235, .07);
+    --nav-bg: rgba(255, 255, 255, .78);
+  }
+
+  /* 插图内部把品牌令牌也钉回深色。theme.css 的 .ui-dark 只钉中性令牌
+     （底色、文字、描边），品牌色各家不一样，得各页面自己钉。 */
+  .ui-dark {
+    --accent: #6ee7b7;
+    --accent-dim: #2f6b57;
+    --accent-bg: #0f1a17;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; scroll-padding-top: 84px; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* The two glow layers. A real element rather than body::before, because the
+     hero parallax moves them and a pseudo-element cannot be transformed from
+     script. Same gradients, so a page that never scrolls looks unchanged. */
+  .bg-glow {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background:
+      radial-gradient(680px 420px at 78% -8%, var(--glow-1), transparent 70%),
+      radial-gradient(560px 380px at 8% 4%, var(--glow-2), transparent 70%);
+  }
+
+  .wrap { position: relative; z-index: 1; max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  code, kbd, pre { font-family: var(--mono); }
+
+  /* ---------- nav ---------- */
+  header.nav {
+    position: sticky; top: 0; z-index: 50;
+    backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px);
+    background: var(--nav-bg);
+    border-bottom: 1px solid transparent;
+    transition: border-color .25s ease;
+  }
+  header.nav.stuck { border-bottom-color: var(--line); }
+  .nav-inner {
+    max-width: var(--maxw); margin: 0 auto; padding: 14px 24px;
+    display: flex; align-items: center; gap: 20px;
+  }
+  /* 回站点的入口。落地页是从 gallery 点进来的，得能退回去。
+     放在最左边，不放进 .nav-links —— 那里的 <a> 会被 #navPill 的滑动指示器数进去。 */
+  .nav-back { color: var(--fg-faint); font-size: 13px; text-decoration: none; flex: none; transition: color .18s; }
+  .nav-back:hover { color: var(--fg); text-decoration: none; }
+
+  /* nowrap 是对称的保险：.brand 是 flex 子项，被挤到只剩一个字宽时中文会逐字换行 ——
+     另一份落地页的「商会通」就这样被折成了竖排三行。这里的 "ClaudePocket" 是一个长单词、
+     本来就不从中间断开，所以窄屏塌的是链接不是品牌名；但两页共用同一套导航写法，
+     这条留在根上，免得以后谁调断点时又在那边冒出来。 */
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: -.01em; white-space: nowrap; }
+  /* the app icon, 26px in the nav. The transparent margin the macOS/Android art
+     carries is left in — it is what makes it read as an icon and not a swatch. */
+  .brand .mark { width: 26px; height: 26px; flex: none; display: block; }
+  .nav-links { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+  .nav-links a {
+    color: var(--fg-dim); font-size: 14px; padding: 6px 11px; border-radius: 8px;
+    text-decoration: none; transition: color .18s, background .18s;
+  }
+  .nav-links a:hover { color: var(--fg); background: #171c23; }
+  .nav-links a.active { color: var(--accent); background: #14231e; }
+
+  /* ---------- hero ---------- */
+  /* 只写上下内边距，别用 padding 简写 —— 会把 .wrap 的左右 24px 一并抹成 0。 */
+  .hero { padding-top: 78px; padding-bottom: 34px; }
+  .hero-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 56px; align-items: center; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 12px; color: var(--fg-dim);
+    border: 1px solid var(--line); background: var(--bg-soft);
+    padding: 5px 12px; border-radius: 999px; margin-bottom: 22px;
+  }
+  .badge .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 10px var(--accent);
+    animation: badge-breathe 2.6s ease-in-out infinite;
+  }
+  @keyframes badge-breathe {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .45; transform: scale(.78); }
+  }
+
+  h1 {
+    font-size: clamp(34px, 5vw, 56px); line-height: 1.12; letter-spacing: -.025em;
+    margin: 0 0 20px; font-weight: 720;
+  }
+  h1 .grad {
+    background: linear-gradient(100deg, var(--accent) 10%, var(--blue) 60%, var(--purple));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lede { font-size: clamp(16px, 1.6vw, 18.5px); color: var(--fg-dim); margin: 0 0 30px; max-width: 46ch; }
+  .lede strong { color: var(--fg); font-weight: 600; }
+
+  .cta { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 11px 20px; border-radius: 10px; font-size: 15px; font-weight: 580;
+    border: 1px solid var(--line); background: var(--bg-soft); color: var(--fg);
+    transition: transform .16s ease, border-color .18s, background .18s;
+  }
+  .btn:hover { text-decoration: none; transform: translateY(-1px); border-color: #35404c; }
+  .btn.primary {
+    background: linear-gradient(140deg, #2ad19d, #57c8ff);
+    color: #04211a; border-color: transparent; font-weight: 680;
+  }
+  .btn.primary:hover { filter: brightness(1.06); }
+  .btn .arrow { transition: transform .18s ease; }
+  .btn:hover .arrow { transform: translateX(3px); }
+
+  .hero-meta {
+    margin-top: 26px; display: flex; gap: 18px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12.5px; color: var(--fg-faint);
+  }
+
+  /* ---------- phone mock ---------- */
+  .phone {
+    width: 100%; max-width: 322px; margin: 0 auto;
+    border: 1px solid #2b323b; border-radius: 34px; padding: 11px;
+    background: linear-gradient(170deg, #1b2129, #0e1116 60%);
+    box-shadow: 0 30px 70px -30px rgba(0, 0, 0, .9), 0 0 0 6px rgba(255, 255, 255, .015);
+  }
+  .phone-screen {
+    border-radius: 25px; background: #080a0d; overflow: hidden; border: 1px solid #1d2229;
+    position: relative;
+  }
+  .phone-notch {
+    height: 22px; display: grid; place-items: center;
+  }
+  .phone-notch span { width: 62px; height: 5px; border-radius: 3px; background: #232a33; }
+
+  .app-bar {
+    display: flex; align-items: center; gap: 8px; padding: 4px 13px 10px;
+    border-bottom: 1px solid #171c23;
+  }
+  .app-bar .title { font-size: 12.5px; color: var(--fg-dim); font-weight: 560; }
+  .pill {
+    margin-left: auto; display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 10.5px; padding: 3px 9px; border-radius: 999px;
+    border: 1px solid var(--line); background: #0f1318; color: var(--fg-faint);
+    transition: color .3s, border-color .3s;
+  }
+  .pill .led { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); transition: background .3s; }
+  .pill.on { color: var(--accent); border-color: #24513f; }
+  .pill.on .led { background: var(--accent); box-shadow: 0 0 8px rgba(110, 231, 183, .7); }
+  .pill.off { color: var(--fg-faint); }
+  .pill.off .led { background: var(--fg-faint); }
+
+  .term {
+    font-family: var(--mono); font-size: 11px; line-height: 1.72;
+    padding: 12px 13px 16px; min-height: 268px;
+  }
+  /* pre-wrap belongs on the line, not on the terminal: on the container it also
+     preserves the newlines and indentation *between* the lines in the markup,
+     which renders as a blank line apiece — 57px of leading instead of 19. */
+  .term .ln { white-space: pre-wrap; word-break: break-word; opacity: 0; animation: fade .3s forwards; }
+  @keyframes fade { to { opacity: 1; } }
+  .term .p { color: var(--accent); }
+  .term .u { color: var(--blue); }
+  .term .d { color: var(--fg-faint); }
+  .term .t { color: var(--fg); }
+  .term .w { color: var(--amber); }
+  .term .ok { color: var(--accent); }
+  .term .caret {
+    display: inline-block; width: 7px; height: 13px; background: var(--accent);
+    vertical-align: -2px; animation: blink 1.05s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- sections ---------- */
+  section { padding: 76px 0; }
+  section + section { border-top: 1px solid var(--line-soft); }
+
+  .kicker {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 12px;
+  }
+  h2 { font-size: clamp(24px, 3vw, 33px); letter-spacing: -.02em; margin: 0 0 14px; font-weight: 680; }
+  .sub { color: var(--fg-dim); margin: 0 0 40px; max-width: 62ch; }
+
+  /* flow diagram */
+  .flow {
+    display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: stretch;
+    gap: 0; border: 1px solid var(--line); border-radius: var(--radius);
+    background: linear-gradient(180deg, #12161c, #0e1217); overflow: hidden;
+  }
+  .flow .node { padding: 22px 20px; }
+  .flow .node h4 { margin: 0 0 6px; font-size: 15px; font-weight: 620; }
+  .flow .node p { margin: 0; font-size: 13px; color: var(--fg-faint); font-family: var(--mono); line-height: 1.6; }
+  .flow .arrow {
+    display: grid; place-items: center; padding: 0 8px;
+    color: var(--fg-faint); font-family: var(--mono); font-size: 11px;
+    border-left: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft);
+    background: #0d1116; text-align: center; gap: 4px;
+  }
+  .flow .arrow span { display: block; }
+  .flow .arrow .glyph { color: var(--accent); font-size: 15px; }
+
+  .principles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 20px; }
+  .pcard {
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 20px;
+    background: var(--bg-card);
+  }
+  .pcard .n {
+    font-family: var(--mono); font-size: 12px; color: var(--accent);
+    border: 1px solid var(--accent-dim); border-radius: 6px; padding: 2px 7px;
+    display: inline-block; margin-bottom: 12px;
+  }
+  .pcard h4 { margin: 0 0 8px; font-size: 15.5px; }
+  .pcard p { margin: 0; font-size: 14px; color: var(--fg-dim); }
+
+  /* feature grid */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card {
+    border: 1px solid var(--line); border-radius: var(--radius); padding: 22px 20px;
+    background: var(--bg-card); transition: border-color .2s, transform .25s var(--ease-out), box-shadow .25s var(--ease-out);
+  }
+  .card:hover { border-color: #313c48; transform: translateY(-3px); box-shadow: var(--card-shadow); }
+  .card .ico {
+    width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+    background: #0f1a17; border: 1px solid #1f3a30; color: var(--accent); margin-bottom: 14px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 16px; font-weight: 620; }
+  .card p { margin: 0; font-size: 14px; color: var(--fg-dim); }
+  .card p + p { margin-top: 10px; }
+  .card code {
+    font-size: 12.5px; background: #0d1218; border: 1px solid var(--line-soft);
+    padding: 1px 6px; border-radius: 5px; color: var(--blue);
+  }
+  .card .btn { margin-top: 16px; }
+  /* 下载卡里 Gatekeeper 的说明：比正文小一号，和按钮之间一条分隔线。 */
+  .card .install-note {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft);
+    font-size: 12.5px; line-height: 1.65;
+  }
+  .card .install-note code { font-size: 11.5px; }
+
+  /* steps timeline */
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: s; }
+  .steps li {
+    position: relative; padding: 0 0 26px 46px; counter-increment: s;
+  }
+  .steps li::before {
+    content: counter(s); position: absolute; left: 0; top: 2px;
+    width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+    font-family: var(--mono); font-size: 12.5px; font-weight: 700;
+    color: var(--accent); background: #12211c; border: 1px solid var(--accent-dim);
+  }
+  .steps li:not(:last-child)::after {
+    content: ""; position: absolute; left: 14px; top: 34px; bottom: 4px; width: 1px;
+    background: linear-gradient(180deg, var(--line), transparent);
+  }
+  .steps h4 { margin: 3px 0 6px; font-size: 15.5px; }
+  .steps p { margin: 0; font-size: 14px; color: var(--fg-dim); }
+  .steps .note {
+    display: block; margin-top: 8px; font-family: var(--mono); font-size: 12.5px;
+    color: var(--amber);
+  }
+
+  /* security list */
+  .secure { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .secure .card { background: linear-gradient(180deg, #141a20, #11151a); }
+
+  /* app download cards: three across, and the button sits on the card's floor
+     rather than after the text — two cards whose copy differs by a line would
+     otherwise show their buttons at two different heights. */
+  .secure.apps { grid-template-columns: repeat(3, 1fr); }
+  /* the two shipping cards show the app icon; the not-yet-one shows it dimmed, so
+     the card reads as "same thing, later" rather than "different thing". */
+  .secure .card .appicon { width: 44px; height: 44px; display: block; margin-bottom: 14px; }
+  .secure .card.soon .appicon { opacity: .4; }
+  .secure .card { display: flex; flex-direction: column; }
+  .secure .card .btn { margin-top: auto; }
+
+  /* the not-yet-one: dashed, mute, and no cursor inviting a click */
+  .secure .card.soon { border-style: dashed; border-color: #2f3743; background: none; }
+  .secure .card.soon h3 { color: var(--fg-dim); }
+  .secure .card.soon:hover { transform: none; border-color: #2f3743; }
+  .btn.soon {
+    background: #101419; border-style: dashed; color: var(--fg-faint); cursor: default;
+  }
+  .btn.soon:hover { transform: none; border-color: var(--line); }
+
+  /* table */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 620px; }
+  th, td { text-align: left; padding: 11px 15px; border-bottom: 1px solid var(--line-soft); }
+  th { background: #0f141a; font-weight: 600; color: var(--fg-dim); font-size: 12.5px;
+       font-family: var(--mono); letter-spacing: .02em; }
+  tr:last-child td { border-bottom: none; }
+  td code { color: var(--blue); font-size: 12.5px; }
+  td:first-child { white-space: nowrap; }
+
+  /* limits */
+  .limits { display: grid; gap: 12px; }
+  .limit {
+    display: flex; gap: 13px; align-items: flex-start;
+    border: 1px solid var(--line); border-left: 2px solid var(--amber);
+    border-radius: 10px; padding: 15px 17px; background: var(--bg-card);
+  }
+  .limit .tag {
+    font-family: var(--mono); font-size: 11px; color: var(--amber);
+    border: 1px solid #4a3a22; background: #1d1710; border-radius: 6px;
+    padding: 2px 7px; flex: none; margin-top: 2px;
+  }
+  .limit p { margin: 0; font-size: 14px; color: var(--fg-dim); }
+  .limit p b { color: var(--fg); font-weight: 600; }
+
+  /* faq */
+  details {
+    border: 1px solid var(--line); border-radius: 11px; background: var(--bg-card);
+    padding: 0; margin-bottom: 10px; overflow: hidden;
+  }
+  details summary {
+    cursor: pointer; padding: 15px 18px; font-size: 15px; font-weight: 560;
+    list-style: none; display: flex; align-items: center; gap: 10px;
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before {
+    content: "+"; font-family: var(--mono); color: var(--accent); font-size: 15px; width: 12px;
+  }
+  details[open] summary::before { content: "−"; }
+  details .ans { padding: 0 18px 16px 40px; color: var(--fg-dim); font-size: 14px; }
+  details .ans p { margin: 0 0 10px; }
+  details .ans p:last-child { margin-bottom: 0; }
+
+  /* sub-heading inside a section */
+  .subhead {
+    font-size: 17px; font-weight: 620; letter-spacing: -.01em;
+    margin: 46px 0 16px;
+  }
+
+  /* key caps: the app's real shortcut strip */
+  .keys { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 4px; }
+  .keycap {
+    font-family: var(--mono); font-size: 12px; color: var(--fg-dim);
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 7px;
+    background: linear-gradient(180deg, #1a2027, #12171d);
+    padding: 4px 9px; min-width: 30px; text-align: center;
+  }
+
+  /* a verbatim line from the app itself */
+  .quote {
+    margin: 14px 0 0; padding: 12px 15px; border-left: 2px solid var(--accent-dim);
+    background: #0f141a; border-radius: 0 8px 8px 0;
+    font-family: var(--mono); font-size: 12.5px; color: var(--fg-dim); line-height: 1.9;
+  }
+  .quote b { color: var(--fg); font-weight: 600; }
+  .quote em { color: var(--fg-faint); font-style: normal; }
+
+  /* ============ interactions ============ */
+
+  /* reading progress, drawn on the nav's own bottom edge */
+  .nav-progress {
+    position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+    transform: scaleX(0); transform-origin: 0 50%; opacity: .85;
+    background: linear-gradient(90deg, var(--accent), var(--blue), var(--purple));
+  }
+
+  /* The active-section highlight is one block that travels between links,
+     instead of each link lighting up where it stands. Only after script has
+     measured it (js-pill): with no script the plain background stays. */
+  .nav-links { position: relative; }
+  .nav-pill {
+    position: absolute; top: 0; left: 0; height: 100%; width: 0;
+    border-radius: 8px; background: #14231e; pointer-events: none;
+    transition: transform .3s cubic-bezier(.4, 0, .2, 1), width .3s cubic-bezier(.4, 0, .2, 1);
+  }
+  .nav-links.js-pill a { position: relative; z-index: 1; }
+  .nav-links.js-pill a.active { background: none; }
+
+  /* the rule in front of a kicker, and the h2 arriving one character at a time
+     (the split only happens when script is there to animate it) */
+  .kicker { display: flex; align-items: center; gap: 9px; }
+  .kicker::before {
+    content: ""; width: 2px; height: 12px; border-radius: 2px; flex: none;
+    background: var(--accent);
+    transform: scaleY(0); transform-origin: 50% 0;
+    transition: transform .5s cubic-bezier(.2, .7, .3, 1);
+  }
+  .kicker.lit::before { transform: scaleY(1); }
+
+  h2.split .ch { display: inline-block; white-space: pre; opacity: 0; transform: translateY(10px); }
+  h2.split .ch.in { animation: chIn .5s cubic-bezier(.2, .7, .3, 1) forwards; }
+  @keyframes chIn { to { opacity: 1; transform: none; } }
+
+  /* a number counting up must not shuffle its neighbours sideways */
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- the phone in 手机端: this one is meant to be poked ---------- */
+  .demo {
+    display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 40px;
+    align-items: center; margin-bottom: 44px;
+  }
+  .demo .phone { max-width: 300px; margin: 0; }
+  .demo-stage { position: relative; }
+  .demo .term { min-height: 250px; }
+  /* Two rows, not a wrapping pile: ten caps at full size break into three lines
+     inside a 300px phone, and the third line lands half outside the shell. */
+  .demo-keys { padding: 10px 12px 13px; border-top: 1px solid #171c23; }
+  .demo-keys .keys { margin: 0; flex-wrap: nowrap; }
+  .demo-keys .keys + .keys { margin-top: 6px; }
+  .demo-keys .keycap { font-size: 11px; padding: 3px 5px; min-width: 24px; }
+
+  /* the lamp column, floating over the terminal's top-right like the real one */
+  .lamps {
+    position: absolute; top: 11px; right: 6px;
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 6px; border-radius: 9px;
+    background: rgba(10, 14, 18, .74); border: 1px solid #1d242c;
+  }
+  .lamp {
+    position: relative; width: 12px; height: 12px; flex: none;
+    padding: 0; border: 0; border-radius: 50%; background: #39424c;
+    cursor: pointer; transition: background .25s;
+  }
+  .lamp::before { content: ""; position: absolute; inset: -6px; }  /* a 12px circle is not a fingertip */
+  .lamp.s-working { background: var(--accent); animation: lampPulse 1.5s ease-in-out infinite; }
+  .lamp.s-idle { background: var(--accent); }
+  .lamp.s-waiting { background: var(--amber); }
+  .lamp.s-error { background: var(--red); }
+  .lamp.s-offline { background: #4a5560; }
+  .lamp[aria-current="true"] { box-shadow: 0 0 0 2px rgba(230, 237, 243, .4); }
+  @keyframes lampPulse { 50% { opacity: .45; } }   /* dims, never blinks out */
+
+  button.keycap { cursor: pointer; }
+  button.keycap:hover { color: var(--fg); border-color: #35404c; }
+  button.keycap:active { transform: translateY(1px); border-bottom-width: 1px; }
+
+  .demo-note h3 { margin: 0 0 10px; font-size: 17px; font-weight: 620; }
+  .demo-note p { margin: 0 0 10px; font-size: 14px; color: var(--fg-dim); max-width: 48ch; }
+  .demo-read { font-family: var(--mono); font-size: 12.5px; color: var(--accent); min-height: 1.6em; }
+
+  /* ---------- the pairing walkthrough in 配对 ---------- */
+  .pair-demo {
+    display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
+    gap: 18px; margin-bottom: 40px;
+  }
+  .panel {
+    display: flex; flex-direction: column;
+    /* theme.css 里也有个 .panel，那是首页用的，带 18px 内边距。
+       这里的 .panel-body 自己带内边距，不压掉的话头部会缩进去一圈。 */
+    padding: 0;
+    border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-card);
+    overflow: hidden;
+  }
+  .panel-head {
+    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+    border-bottom: 1px solid var(--line-soft);
+    font-family: var(--mono); font-size: 12px; color: var(--fg-faint);
+  }
+  .panel-head .sp { margin-left: auto; }
+  .panel-body { display: flex; flex-direction: column; gap: 12px; padding: 18px; flex: 1; }
+  .panel-body p { margin: 0; font-size: 13.5px; color: var(--fg-dim); }
+  .panel-actions { display: flex; gap: 9px; flex-wrap: wrap; margin-top: auto; }
+  .panel-actions .btn { padding: 9px 16px; font-size: 14px; }
+
+  /* the pairing code: a placeholder pattern, deliberately too dim to be
+     mistaken for something scrapable */
+  .qr {
+    display: grid; gap: 2px; width: 138px; padding: 9px; border-radius: 9px;
+    background: #0d1116; border: 1px solid var(--line);
+  }
+  .qr i { background: #141a21; border-radius: 1px; aspect-ratio: 1; }
+  .qr i.on { background: #39434e; }
+  .qr-cap { font-family: var(--mono); font-size: 11.5px; color: var(--fg-faint); }
+  .facts { font-family: var(--mono); font-size: 12.5px; color: var(--fg-dim); }
+  .facts b { color: var(--fg); font-weight: 600; }
+  .fact-note { font-size: 12.5px; color: var(--fg-faint); }
+  .fp { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 50%;
+        border: 1px solid var(--accent-dim); background: #101a17; color: var(--accent); }
+  .fp.scan { animation: fpScan 1s ease-in-out infinite; }
+  @keyframes fpScan { 50% { border-color: var(--accent); box-shadow: 0 0 0 6px rgba(110, 231, 183, .08); } }
+
+  /* footer */
+  footer {
+    border-top: 1px solid var(--line); padding: 46px 0 60px; color: var(--fg-faint); font-size: 13.5px;
+  }
+  .foot-grid { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 30px; margin-bottom: 30px; }
+  .foot-grid h5 {
+    margin: 0 0 10px; font-size: 12.5px; font-family: var(--mono); letter-spacing: .06em;
+    text-transform: uppercase; color: var(--fg-dim);
+  }
+  .foot-grid ul { list-style: none; margin: 0; padding: 0; }
+  .foot-grid li { margin-bottom: 6px; font-family: var(--mono); font-size: 12.5px; }
+  .foot-grid li span { color: var(--fg-faint); font-family: var(--sans); }
+  .foot-bottom { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+  /* reveal */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity .65s var(--ease-out), transform .65s var(--ease-out); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (max-width: 940px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+    .phone { max-width: 300px; }
+    .flow { grid-template-columns: 1fr; }
+    .flow .arrow {
+      border: none; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
+      padding: 8px 0; flex-direction: row;
+    }
+    .flow .arrow span { display: inline; }
+    .flow .arrow .glyph { transform: rotate(90deg); }
+    .principles, .grid, .secure, .secure.apps { grid-template-columns: 1fr; }
+    .demo { grid-template-columns: 1fr; gap: 26px; }
+    .demo .phone { margin: 0 auto; }
+    .pair-demo { grid-template-columns: 1fr; }
+    .foot-grid { grid-template-columns: 1fr; gap: 22px; }
+    section { padding: 58px 0; }
+  }
+  /* 这排链接一行放不下就会折行，而那个跟着滚动的指示块只能描述一行 —— 一折行它
+     就落回素色背景。所以断点必须落在「真的放不下」之上，不能凭感觉。
+
+     分三段，不是一个断点：
+
+       > 900px       原样
+       740–900px     压着显示（手机横屏正好落在这一段）
+       < 740px       整排收起
+
+     900 这个数是量出来的：1400px 下量每个链接的自然宽度（此时都是一行，量到的就是
+     它本来的宽度），这 6 个链接连间距在内占 432px；加上「← AppGallery」、品牌、◐
+     和三段间距，整条导航一行需要 793px。实测吻合 —— 760px 折两行，800px 不折。
+
+     中间那段的压法，是按「同样省一像素、哪个更不显眼」挑的：
+       链接的左右内边距 11→7px、字号 14→13px、链接间距 4→0
+       .nav-inner 的 gap 20→14px —— 最划算的一样。它自己占着 3×20 = 60px，收到 14
+                                     就凭空补出 18px，而内间距收紧几乎看不出来
+     压完这页在 740px 还剩 53px 余量。
+
+     敢把链接的 flex-wrap 关掉，是因为放不下时它就不再折行、而是横向溢出 —— 那比折行
+     更糟。所以关掉的前提是「确实放得下」，而定住这个前提的不是本页、是商会通：那页
+     8 个链接，压到同样程度在 701px 仍差 8px、740px 才转正（+30）。740 是两页共用的
+     下限。本页单独看在 701px 还有 14px 余量，但既然共用一套断点，就跟着一起收。
+
+     30px 余量为什么吃得住，见商会通那页：那边链接和品牌名全是汉字。
+
+     740 以下就真放不下了 —— 那点宽度里塞不下「← AppGallery + 品牌 + 8 个链接 + ◐」，
+     任何压法都只是把话挤成一团。整排收起，只留「← AppGallery」、品牌和 ◐；落地页
+     本来就是自上而下读的，跳锚点省下的那点滚动抵不上这个乱。
+
+     ◐ 那条 margin-left: auto 是补丁，不是设计：把右边这一切推向右边的力，本来是挂
+     在 .nav-links 身上的；链接一 display:none，那股力也一并没了，◐ 就贴到品牌名
+     后面去了 —— 手机上看到的正是这个。不能挪进 assets/theme.css：站点页的 ◐ 在
+     .nav-links 内部，那边的推力不该被动到。中间那段不需要它：链接还在，推力还在。
+
+     这里原有两条规则，跟着一起删了：「.nav-pill 单独隐藏」（多余的，.nav-pill 是
+     .nav-links 的子元素，父级不显示它自然也没了）和「活动链接改回实心底」
+     （那条本来就是为「指示块被关掉、得让活动项自己亮起来」写的，现在整排都不在，
+     没有可亮的对象）。 */
+  @media (max-width: 739px) {
+    .nav-links { display: none; }
+    .theme-toggle { margin-left: auto; }
+  }
+  /* 横屏夹缝：还放得下，就别把菜单整排收掉。740 / 900 两个数怎么来的，见上面那段。 */
+  @media (min-width: 740px) and (max-width: 900px) {
+    .nav-inner { gap: 14px; }
+    /* nowrap 是这一段的前提：留着 wrap 就还是会折行，白压。
+       单个链接上的 white-space: nowrap 负责另一半 —— 它是 flex 子项，min-width: auto
+       会退到 min-content，而中文的 min-content 是「一个字」，不锁住就会在链接内部
+       竖着折。两处缺一不可。 */
+    .nav-links { flex-wrap: nowrap; gap: 0; }
+    .nav-links a { padding: 6px 7px; font-size: 13px; white-space: nowrap; }
+  }
+  @media (max-width: 560px) {
+    /* 这里原本还有一条 `.nav-links a` 的缩字号规则。链接在 739px 就整排收起了，
+       它永远轮不到，删掉。 */
+    .wrap { padding: 0 18px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .term .ln { opacity: 1; animation: none; }
+    .badge .dot { animation: none; }
+    .term .caret { animation: none; }
+    /* the script skips the parallax and the count-up on this setting; these are
+       the pieces that would otherwise sit at their start state */
+    .kicker::before { transform: scaleY(1); transition: none; }
+    h2.split .ch { opacity: 1; transform: none; animation: none; }
+    .nav-pill { transition: none; }
+    .lamp.s-working { animation: none; }
+    .fp.scan { animation: none; }
+  }
+
+  /* ===== 浅色主题 · 页面外壳 =====
+     只覆盖「网站自己的界面」—— 导航、章节、卡片、按钮、引用块。
+     插图（手机截图、终端、配对面板）整块挂着 .ui-dark，浅色主题碰不到：
+     那些是照着真实 app 画的，翻了反而假。
+
+     下面的值都是挑过的，别逐个顺手改：它们要和品牌薄荷（浅色下 --accent
+     是 #059669）待在同一张页面上。 */
+  [data-theme="light"] .nav-links a:hover { background: #f1f3f6; }
+  [data-theme="light"] .nav-links a.active { background: #ecfdf5; }
+  [data-theme="light"] .nav-pill { background: #d1fae5; }
+  [data-theme="light"] .nav-links.js-pill a.active { background: #d1fae5; }
+
+  /* 主按钮：浅底上原来那条薄荷渐变压不住白字，整条压深一档 */
+  [data-theme="light"] .btn.primary {
+    background: linear-gradient(140deg, #059669, #0284c7);
+    color: #fff;
+  }
+  [data-theme="light"] .btn:hover { border-color: #cbd5e1; }
+
+  [data-theme="light"] .flow { background: linear-gradient(180deg, #f8fafc, #f2f5f8); }
+  [data-theme="light"] .flow .arrow { background: #eef2f6; }
+
+  [data-theme="light"] .card:hover { border-color: #c7d0da; }
+  [data-theme="light"] .card .ico { background: #ecfdf5; border-color: #a7f3d0; }
+  [data-theme="light"] .card code { background: #f1f3f6; }
+  /* 站点卡片里的展示性按键。只挑 .card 里的 —— 手机截图里那排键帽在 .ui-dark 里，
+     这条规则不该够到它们。 */
+  [data-theme="light"] .card .keycap { background: linear-gradient(180deg, #fff, #f1f3f6); }
+
+  [data-theme="light"] .steps li::before { background: #d1fae5; }
+
+  [data-theme="light"] .secure .card { background: linear-gradient(180deg, #fbfcfd, #f6f8fa); }
+  [data-theme="light"] .secure .card.soon,
+  [data-theme="light"] .secure .card.soon:hover { border-color: #cbd5e1; }
+  [data-theme="light"] .btn.soon { background: #f4f6f8; }
+
+  [data-theme="light"] .limit .tag { border-color: #fde68a; background: #fffbeb; }
+  [data-theme="light"] .quote { background: #f4f6f8; }
+</style>
+<!-- 皮肤版式最后加载：它把上面的页面框架画成 03 粗野或 08 玻璃，
+     手机屏、终端、配对面板这些 .ui-dark 插图保持原样。 -->
+<link rel="stylesheet" href="../assets/skin.css">
+<noscript><style>.reveal { opacity: 1; transform: none; } [data-theme-toggle], [data-skin-toggle] { display: none; }</style></noscript>
+</head>
+<body data-page="landing">
+
+<!-- 应用图标。画一次，导航栏和下载卡都用它 —— 跟各平台 app 图标是同一张图。 -->
+<svg width="0" height="0" aria-hidden="true" style="position:absolute">
+  <defs>
+    <linearGradient id="cpField" x1="0" y1="0" x2="0.45" y2="1">
+      <stop offset="0" stop-color="#5eead4"/><stop offset="0.5" stop-color="#34d399"/><stop offset="1" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  <symbol id="cp-icon" viewBox="0 0 512 512">
+    <rect x="20.48" y="20.48" width="471.04" height="471.04" rx="110.7" fill="url(#cpField)"/>
+    <rect x="104" y="128" width="304" height="256" rx="34" fill="#06251c"/>
+    <g fill="none" stroke="#6ee7b7" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M164 240 L208 274 L164 308"/><path d="M228 308 L296 308"/>
+    </g>
+  </symbol>
+</svg>
+
+<div class="bg-glow" id="glow" aria-hidden="true"></div>
+
+<header class="nav" id="nav">
+  <div class="nav-inner">
+    <a class="nav-back" href="../index.html">← AppGallery</a>
+    <a class="brand" href="#top"><svg class="mark" aria-hidden="true"><use href="#cp-icon"/></svg>ClaudePocket</a>
+    <nav class="nav-links" id="navLinks">
+      <span class="nav-pill" id="navPill"></span>
+      <a href="#how">它是怎么工作的</a>
+      <a href="#features">能力</a>
+      <a href="#start">开始使用</a>
+      <a href="#phone">手机端</a>
+      <a href="#pair">配对</a>
+      <a href="#limits">边界</a>
+    </nav>
+    <button class="theme-toggle" type="button" data-theme-toggle aria-label="切换明暗模式">◐</button>
+    <button class="theme-toggle skin-toggle" type="button" data-skin-toggle aria-label="切换皮肤">✳</button>
+  </div>
+  <span class="nav-progress" id="navProgress"></span>
+</header>
+
+<main id="top">
+
+  <div class="wrap hero">
+    <div class="hero-grid">
+      <div>
+        <div class="badge"><span class="dot"></span>macOS · Flutter · Node · tmux</div>
+        <h1>把 Claude Code<br><span class="grad">装进兜里</span></h1>
+        <p class="lede">
+          手机变成 Mac 上 Claude Code 会话的一块<strong>远程终端</strong>。
+          会话在电脑上活着 —— 熄屏、断网、退出 app，回来它还在原处。
+        </p>
+        <div class="cta">
+          <a class="btn primary" href="#start">开始使用 <span class="arrow">→</span></a>
+          <a class="btn" href="#how">看看它怎么工作</a>
+        </div>
+        <div class="hero-meta">
+          <span>一个会话 = 一个 tmux pane</span>
+          <span>扫码配对，两道门</span>
+          <span>设备级钥匙，可吊销</span>
+        </div>
+      </div>
+
+      <div class="phone ui-dark" id="heroPhone" aria-hidden="true">
+        <div class="phone-screen">
+          <div class="phone-notch"><span></span></div>
+          <div class="app-bar">
+            <span class="title">ClaudePocket</span>
+            <span class="pill" id="pill"><span class="led"></span><span id="pillText">连接中…</span></span>
+          </div>
+          <div class="term" id="term"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ how ============ -->
+  <section id="how">
+    <div class="wrap">
+      <p class="kicker">架构</p>
+      <h2>三样东西，各干各的</h2>
+      <p class="sub">手机只负责显示和按键，真正在干活的是电脑上那个 Node agent —— 它管 tmux，tmux 里跑着 <code>claude</code>。</p>
+
+      <div class="flow reveal">
+        <div class="node">
+          <h4>手机 app</h4>
+          <p>Flutter · WebView 里的 xterm.js</p>
+        </div>
+        <div class="arrow"><span class="glyph">──▶</span><span>WebSocket :8080</span></div>
+        <div class="node">
+          <h4>agent（Node）</h4>
+          <p>唯一的执行者：管 tmux、管 pty</p>
+        </div>
+        <div class="arrow"><span class="glyph">──▶</span><span>tmux pane</span></div>
+        <div class="node">
+          <h4>claude</h4>
+          <p>一个会话一个进程，一直在那儿</p>
+        </div>
+      </div>
+
+      <div class="principles">
+        <div class="pcard reveal">
+          <span class="n">01</span>
+          <h4>app 只说话，不干活</h4>
+          <p>建会话、发按键、调窗口大小，都是一条 JSON 消息。手机上没有任何 Claude Code 的逻辑。</p>
+        </div>
+        <div class="pcard reveal">
+          <span class="n">02</span>
+          <h4>agent 是唯一的执行者</h4>
+          <p>它管 tmux、管 pty，把 pane 的输出流回手机。权限、进程、文件，全都留在电脑上。</p>
+        </div>
+        <div class="pcard reveal">
+          <span class="n">03</span>
+          <h4>一个会话 = 一个 pane</h4>
+          <p>手机退出、Wi-Fi 断掉、屏幕熄灭，pane 都还在原处。重连回去看到的还是那个会话。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ features ============ -->
+  <section id="features">
+    <div class="wrap">
+      <p class="kicker">能力</p>
+      <h2>它替你解决的那些小事</h2>
+      <p class="sub">每一条都是仓库里已有的行为，不是设想。</p>
+
+      <div class="grid">
+        <div class="card reveal">
+          <div class="ico">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M8 14h8"/></svg>
+          </div>
+          <h3>会话不跟着手机走</h3>
+          <p>Claude 在电脑上继续跑。你在电梯里、地铁上、锁屏一小时后回来，输出还在，历史还在。</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="ico">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 17.5h7M17.5 14v7"/></svg>
+          </div>
+          <h3>扫码配对，两道门</h3>
+          <p>先在 Mac 上过一次系统验证（Touch ID，没有指纹就退回登录密码），手机扫完<strong>电脑上还会再问一句</strong>。</p>
+          <p>那张票 <span class="num" data-to="32">32</span> 字节随机、五分钟、一次、只活在 agent 内存里。</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="ico">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.5" cy="12" r="3.5"/><path d="M12 12h9M18 12v3M15.5 12v2.2"/></svg>
+          </div>
+          <h3>每台设备一把自己的钥匙</h3>
+          <p>配对后电脑当场生成只属于这台手机的 <code>deviceKey</code>；电脑上只存它的 sha256，读到文件也给不出凭据。</p>
+          <p>名册里能看谁什么时候配的、最后什么时候用过，随时可以吊销。</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="ico">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H9l1.6 2H18a1.5 1.5 0 0 1 1.5 1.5v11A1.5 1.5 0 0 1 18 20H5.5A1.5 1.5 0 0 1 4 18.5z"/></svg>
+          </div>
+          <h3>手机也能翻电脑上的文件</h3>
+          <p>从 home 开始的<strong>只读</strong>浏览：代码带高亮和行号，图片能放大，二进制如实说打不开。</p>
+          <p>文本每次最多 <span class="num" data-to="512">512</span> KB、图片 <span class="num" data-to="4">4</span> MB —— 有上限，所以那条 socket 不会被一个文件堵住。</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="ico">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+          </div>
+          <h3>接着以前的会话</h3>
+          <p>列的是 Claude Code <strong>自己的</strong> resume 列表，不是一个另存的副本。</p>
+          <p>会话正被别的进程占着时，app 会先警告 —— 两处同时 resume 会让历史分叉。</p>
+        </div>
+
+        <div class="card reveal">
+          <div class="ico">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7l4 5-4 5"/><path d="M13 17h6"/></svg>
+          </div>
+          <h3>是真的终端</h3>
+          <p>WebView 里跑 xterm.js，接的是真 pty —— 所以换行、光标、宽字符、颜色都对。</p>
+          <p>字体按终端的实测度量，Unicode 11 宽度、拖拽滚动都调过。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ start ============ -->
+  <section id="start">
+    <div class="wrap">
+      <p class="kicker">开始使用</p>
+      <h2>两个应用，三步开始</h2>
+      <p class="sub">没有账号、没有云端、不用注册 —— 打开就配对，配完就能用。</p>
+
+      <!-- 下载地址：两个包都在 zhoujunli/AppGallery 里，挂在同一个 tag（ClaudePocket）下。
+           版本号写在了文件名里，但 tag 是滚动的 —— 发新版时这两个 href 得跟着改，
+           链接不会自己指到新的那个文件上。
+           Mac 那个当时传的是换 dmg 之前打的 zip，所以这里指的是 zip。 -->
+
+      <div class="secure apps">
+        <div class="card reveal">
+          <svg class="appicon" aria-hidden="true"><use href="#cp-icon"/></svg>
+          <h3>ClaudePocket for macOS</h3>
+          <p>菜单栏常驻的小应用。打开它，服务就跟着起来了 —— 不用开终端，也不用装 Node：运行时和全部逻辑都在它里面。</p>
+          <p>启动时它会自己检查这台机器上的 <code>tmux</code> 和 <code>claude</code>。缺了哪一条，它会直接告诉你该装什么。</p>
+          <a class="btn primary" href="https://github.com/zhoujunli/AppGallery/releases/download/ClaudePocket/ClaudePocket-macOS-0.1.0.zip" data-download="mac">下载 macOS 版 <span class="arrow">↗</span></a>
+          <p class="install-note"><strong>第一次打开被拦了？</strong>这是 Gatekeeper 的正常拦截（这个包还没做 Apple 公证），不是文件坏了。先把它拖进「应用程序」，然后任选一种：<br>
+          ① 双击一次、取消弹窗 → <strong>系统设置 → 隐私与安全性</strong>，在「安全性」一栏点「仍要打开」→ 用 Touch ID / 密码验证 → 再确认一次。<br>
+          ② 终端里跑 <code>xattr -dr com.apple.quarantine /Applications/ClaudePocket.app</code>，然后再双击。<br>
+          <strong>macOS 15 起「右键 → 打开」已经不能绕过这个拦截</strong>；而且 app 必须先复制到 <code>/Applications</code>，直接在只读的 dmg 里点会失败。</p>
+        </div>
+        <div class="card reveal">
+          <svg class="appicon" aria-hidden="true"><use href="#cp-icon"/></svg>
+          <h3>ClaudePocket for Android</h3>
+          <p>扫码配对，接着电脑上的会话。会话不跟着手机走 —— 熄屏、断网、退出应用，回来它还在原处。</p>
+          <p>装上打开，照着提示配对就行。手机这边不需要任何配置。</p>
+          <a class="btn primary" href="https://github.com/zhoujunli/AppGallery/releases/download/ClaudePocket/ClaudePocket-Android-0.1.0.apk" data-download="android">下载 Android 版 <span class="arrow">↗</span></a>
+        </div>
+        <!-- 占位：iOS 版做好后，把这张卡片换成和上面两张一样的下载卡 -->
+        <div class="card soon reveal">
+          <svg class="appicon" aria-hidden="true"><use href="#cp-icon"/></svg>
+          <h3>ClaudePocket for iOS</h3>
+          <p>iPhone 版还在做。手机端有的东西它都会有：扫码配对、多会话、灯柱、键盘工具条，同一个终端。</p>
+          <p>做好之后会放在这里，装上就能配对 —— 不用账号，也没有订阅。</p>
+          <span class="btn soon" aria-disabled="true">敬请期待</span>
+        </div>
+      </div>
+
+      <h3 class="subhead">装好之后，三步</h3>
+
+      <ol class="steps">
+        <li class="reveal">
+          <h4>在 Mac 上打开 ClaudePocket</h4>
+          <p>一个菜单栏常驻的小应用 —— 打开它，服务就已经在跑了。不用开终端、不用记端口，也不用先装 Node：运行时和全部逻辑都装在它里面。</p>
+        </li>
+        <li class="reveal">
+          <h4>菜单栏点「配对」，过一次系统验证</h4>
+          <p>Touch ID，没有指纹的机器退回登录密码 —— 密码从头到尾都在系统手里，这个应用既不读也不存。过了验证，面板上才出二维码。</p>
+        </li>
+        <li class="reveal">
+          <h4>手机扫码，电脑上按「允许」</h4>
+          <p>手机上就出现一个终端。之后每次打开手机应用，它自己就连上，不用再配一次。</p>
+        </li>
+      </ol>
+
+    </div>
+  </section>
+
+  <!-- ============ phone ============ -->
+  <section id="phone">
+    <div class="wrap">
+      <p class="kicker">手机端</p>
+      <h2>装上之后，手机上长这样</h2>
+      <p class="sub">主界面只有一样东西：终端。其余的都收在顶栏和左滑的抽屉里 —— 一只手能到的地方，不放第二个屏幕。</p>
+
+      <!-- 可点的手机模型：点一盏灯换会话，点快捷键条真的往终端里发。
+           这里的静态内容就是脚本渲染出来的样子，不跑脚本也读得懂。 -->
+      <div class="demo reveal" id="demo">
+        <div class="phone ui-dark">
+          <div class="phone-screen">
+            <div class="phone-notch"><span></span></div>
+            <div class="app-bar">
+              <span class="title" id="demoTitle">shop-api</span>
+              <span class="pill on" id="demoPill"><span class="led"></span><span id="demoPillText">已连接</span></span>
+            </div>
+            <div class="demo-stage">
+              <div class="term" id="demoTerm" aria-live="polite">
+                <div class="ln"><span class="p">❯</span> <span class="u">把退款的测试补上</span><span class="d">  </span></div>
+                <div class="ln"><span class="d">⏺ Read src/refund/handler.ts</span></div>
+                <div class="ln"><span class="d">⏺ Read src/refund/refund.ts</span></div>
+                <div class="ln"><span class="d">⏺ Edit src/refund/handler.ts</span></div>
+                <div class="ln"><span class="t">  补了三个用例：负数、超额、重复。</span></div>
+                <div class="ln"><span class="d">⏺ Edit src/refund/refund.ts</span></div>
+                <div class="ln"><span class="t">  边界那一段抽成了一个函数。</span></div>
+                <div class="ln"><span class="d">⏺ Bash npm test -- refund</span></div>
+                <div class="ln"><span class="ok">  ✓ 32 passed</span></div>
+                <div class="ln"><span class="t">✻ 还在跑，两条分支没覆盖…</span></div>
+              </div>
+              <div class="lamps" id="demoLamps" role="tablist" aria-label="开着的会话">
+                <button class="lamp s-working" type="button" role="tab" data-session="shop-api"
+                        aria-selected="true" aria-current="true" title="shop-api · 运行中"
+                        aria-label="shop-api，运行中"></button>
+                <button class="lamp s-idle" type="button" role="tab" data-session="docs-site"
+                        aria-selected="false" title="docs-site · 空闲"
+                        aria-label="docs-site，空闲"></button>
+                <button class="lamp s-waiting" type="button" role="tab" data-session="infra"
+                        aria-selected="false" title="infra · 等待输入"
+                        aria-label="infra，等待输入"></button>
+              </div>
+            </div>
+            <div class="demo-keys" id="demoKeys">
+              <div class="keys">
+                <button class="keycap" type="button" data-key="esc">Esc</button>
+                <button class="keycap" type="button" data-key="tab">Tab</button>
+                <button class="keycap" type="button" data-key="ctrlc">Ctrl+C</button>
+                <button class="keycap" type="button" data-key="ctrld">Ctrl+D</button>
+                <button class="keycap" type="button" data-key="ctrll">Ctrl+L</button>
+              </div>
+              <div class="keys">
+                <button class="keycap" type="button" data-key="left">←</button>
+                <button class="keycap" type="button" data-key="up">↑</button>
+                <button class="keycap" type="button" data-key="down">↓</button>
+                <button class="keycap" type="button" data-key="right">→</button>
+                <button class="keycap" type="button" data-key="enter">Enter</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="demo-note">
+          <h3>这一台可以按</h3>
+          <p>右上角那列灯，一个开着的会话一盏：正在吐输出的<strong>运行中</strong>会呼吸，安静 5 秒变<strong>空闲</strong>，安静超过 30 秒变<strong>等待输入</strong>。点一盏就切过去。</p>
+          <p>下面那排键也是真的 —— 它们补的正是软键盘造不出来的那几个键，按一下就往那个会话里发一次。状态牌说的是<strong>连接</strong>，灯说的是<strong>会话</strong>，是两件事。</p>
+          <p class="demo-read" id="demoRead">点一盏灯，或者按一下 Ctrl+C 试试。</p>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card reveal">
+          <h3>顶栏：两个入口</h3>
+          <p>左边是当前会话名，右边一块状态牌：<code>已连接</code> / <code>连接中</code> / <code>离线</code> / <code>出错</code> / <code>凭据失效</code>。</p>
+          <p>再往右两个按钮就是全部入口 —— <strong>↺ 恢复会话</strong> 和 <strong>+ 新建会话</strong>。它们就挨着会话名，因为要打开的正是这个项目的对话，不该先划一下抽屉才够得着。</p>
+        </div>
+
+        <div class="card reveal">
+          <h3>灯柱：一眼看全部会话</h3>
+          <p>终端右上角竖着一列小灯，<strong>一个开着的会话一盏</strong>，按开着的顺序排。正在吐输出的那盏会呼吸（<strong>运行中</strong>）；5 秒内没输出算<strong>空闲</strong>，超过 30 秒算<strong>等待输入</strong> —— 灯黄了不是它要你回答，只是它没在说话。</p>
+          <p>灯多了会自己变小（12 → 8 px），长到终端一半高就不再缩 —— 那时候该用抽屉了。点灯直接切会话。</p>
+        </div>
+
+        <div class="card reveal">
+          <h3>快捷键条</h3>
+          <p>只有开着会话时才出现，补的是手机软键盘造不出来的键：</p>
+          <div class="keys">
+            <span class="keycap">Esc</span><span class="keycap">Tab</span><span class="keycap">Ctrl+C</span><span class="keycap">Ctrl+D</span><span class="keycap">Ctrl+L</span>
+          </div>
+          <div class="keys">
+            <span class="keycap">←</span><span class="keycap">↑</span><span class="keycap">↓</span><span class="keycap">→</span><span class="keycap">Enter</span>
+          </div>
+          <p>打字不用它 —— 直接用手机自己的输入法打在终端里。上面那个模型里这排键是真能按的。</p>
+        </div>
+
+        <div class="card reveal">
+          <h3>抽屉（左滑）</h3>
+          <p>会话列表（一行一个，点一下切过去）、<strong>字号</strong> 10–20、<strong>行高</strong> 0.9–1.6、<strong>保持屏幕常亮</strong>、<strong>浏览文件</strong>、<strong>新建会话</strong>。</p>
+          <p>字号和行高是给不同手机准备的：同样的 100 列，在小屏上要能读得下去。</p>
+        </div>
+
+        <div class="card reveal">
+          <h3>✕ 是「结束」，不是「收起」</h3>
+          <p>会话列表里那个 ✕ 会给电脑发一条 <code>DESTROY</code>：那个 tmux pane 和里面跑着的 claude <strong>真的结束了</strong>。</p>
+          <p>只是想放下手机？不用点它 —— 按 home 键、锁屏、切出去，电脑那边什么都不做。</p>
+        </div>
+
+        <div class="card reveal">
+          <h3>空状态</h3>
+          <p>一台都没连上时，中间只有一句「点击 + 打开 Claude 终端」，下面另给一个恢复会话的入口。</p>
+          <p>没有会话列表要管理，也没有一堆设置等着你 —— 打开就该看见终端。</p>
+        </div>
+      </div>
+
+      <h3 class="subhead">第一次连上，两个入口</h3>
+      <div class="secure">
+        <div class="card reveal">
+          <h3>扫码配对（推荐）</h3>
+          <p>电脑上点「配对」→ 手机扫 → 电脑上确认一次。之后这台手机有自己的钥匙，不用再记 token。</p>
+          <p>详细的两道门见下面「配对」一节。</p>
+        </div>
+        <div class="card reveal">
+          <h3>手工填</h3>
+          <p>地址（IP）、端口、旧 token、项目路径（电脑端，可以点「浏览」挑目录），或者把电脑上打印的 <code>claudepocket://</code> 链接<strong>粘贴</strong>进来。</p>
+          <p>配对过的手机不用填 token —— 对话框里那行提示写的就是这句：它带的是自己的钥匙。</p>
+        </div>
+      </div>
+
+      <h3 class="subhead">每天怎么用</h3>
+      <ol class="steps">
+        <li class="reveal">
+          <h4>新建一个会话</h4>
+          <p>顶栏 <strong>+</strong> → 选项目路径 → 电脑上就开出一个 tmux pane，里面跑起 <code>claude</code>。手机上看到的是它的屏幕。</p>
+        </li>
+        <li class="reveal">
+          <h4>接着以前的会话</h4>
+          <p>顶栏 <strong>↺</strong> 列的是 Claude Code <strong>自己的</strong> resume 列表（当前项目 / 所有项目），不是一个另存的副本。</p>
+          <div class="quote">
+            正在运行此会话。在此恢复会导致两处同时写入。<br>
+            <em>—— 那个会话正被别的进程占着时，app 会先问这句</em>
+          </div>
+        </li>
+        <li class="reveal">
+          <h4>随手丢开</h4>
+          <p>锁屏、切出去、进电梯断网 —— 电脑那边什么都不做。<strong>断开不等于结束</strong>：tmux 会话留着，下次连上重新接管，并把断开期间攒下的输出从头补给你，一条不丢。</p>
+        </li>
+        <li class="reveal">
+          <h4>不想它熄屏</h4>
+          <p>抽屉里的<strong>保持屏幕常亮</strong>管这件事。手机多少秒没触摸会熄屏、熄屏之后 Wi-Fi 断不断，都是手机自己的设置 —— 断了就是连接掉一次，会话没事。</p>
+        </li>
+        <li class="reveal">
+          <h4>顺手翻一下电脑上的文件</h4>
+          <p>抽屉 → <strong>浏览文件</strong>，从 home 开始，只读。看到代码带高亮和行号，图片能放大，二进制文件它会如实说打不开。</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ pair ============ -->
+  <section id="pair">
+    <div class="wrap">
+      <p class="kicker">配对</p>
+      <h2>码是票，不是钥匙</h2>
+      <p class="sub">两道门，中间夹着一张只兑一次的票。</p>
+
+      <!-- 走一遍两道门。静态内容就是「还没开始」那一步，脚本接管后每一步都真的会发生。 -->
+      <div class="pair-demo reveal ui-dark" id="pairDemo">
+        <div class="panel">
+          <div class="panel-head"><span>电脑上 · 菜单栏面板</span><span class="sp" id="pairMacHead">未配对</span></div>
+          <div class="panel-body" id="pairMac" aria-live="polite">
+            <p>先过一次系统验证 —— 过了才出码。</p>
+            <div class="panel-actions">
+              <button class="btn primary" type="button" data-pair="start">配对</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span>手机上</span><span class="sp" id="pairPhoneHead">未配对</span></div>
+          <div class="panel-body" id="pairPhone" aria-live="polite">
+            <p>还没连过这台电脑。</p>
+          </div>
+        </div>
+      </div>
+
+      <ol class="steps">
+        <li class="reveal">
+          <h4>电脑上点「配对」，先过系统验证</h4>
+          <p>Touch ID，没有指纹的机器退回登录密码。这一步完全是本机的事：密码从头到尾都在系统手里，这个应用既不读也不存。按「取消」，面板上就写「没有通过系统验证，没有生成配对码」—— 没有码。</p>
+        </li>
+        <li class="reveal">
+          <h4>过了验证，才出一张二维码</h4>
+          <p><span class="num" data-to="32">32</span> 字节随机数，五分钟、一次、只活在 agent 内存里。五分钟一到，面板上那个码自己消失，位置上换成「已失效 · 重新生成」。</p>
+          <span class="note">拿到它就能配一台设备 —— 所以它只该出现在你自己看着的屏幕上。</span>
+        </li>
+        <li class="reveal">
+          <h4>手机扫完，电脑上再问一句</h4>
+          <p>那句话写的是<strong>这台电脑自己看到的</strong>地址，以及手机自称的名字 —— 地址是事实，名字是对方说的。这句问话会自己弹到最前面，不需要面板开着，只等两分钟。</p>
+        </li>
+        <li class="reveal">
+          <h4>手机拿到只属于它自己的钥匙</h4>
+          <p>agent 当场生成 <code>deviceKey</code>，手机存下来，以后每次连接都带着它。电脑上写的只是它的 sha256。</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ security ============ -->
+  <section id="security">
+    <div class="wrap">
+      <p class="kicker">安全模型</p>
+      <h2>这台机器上的东西，凭什么给手机</h2>
+      <p class="sub">默认值是「同一个 Wi-Fi 下谁拿到凭据谁就有读权限」—— 终端本来就能读任何东西，所以这不是新增的暴露，但值得知道。</p>
+
+      <div class="secure">
+        <div class="card">
+          <h3>票不是钥匙</h3>
+          <p>配对码是五分钟、一次的票，兑不了第二次。同一个码再扫一遍，手机只会听到「这个配对码已失效」。</p>
+        </div>
+        <div class="card">
+          <h3>凭证是设备级的</h3>
+          <p>吊销某台设备，它<strong>下一次连接会被当面告知</strong>（不是连不上，是连上了再被请出去），而且不会自动重连回来。重新扫一张新票就能再配上。</p>
+        </div>
+        <div class="card">
+          <h3>控制口不出本机</h3>
+          <p>应用面板从 <code>127.0.0.1</code> 上的控制口要票、读名册、吊销设备。它只绑回环地址，并且拒绝任何带 <code>Origin</code> 的请求 —— 一个浏览器标签页没法调到它。</p>
+        </div>
+        <div class="card">
+          <h3>日志里没有秘密</h3>
+          <p>启动日志只打 token 的前后各四位指纹，够你分辨是不是同一个 token，不够当 token 用。链接也不进日志。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ limits ============ -->
+  <section id="limits">
+    <div class="wrap">
+      <p class="kicker">边界</p>
+      <h2>它不做什么</h2>
+      <p class="sub">把话说在前面，省得你以为它能干。</p>
+
+      <div class="limits">
+        <div class="limit reveal">
+          <span class="tag">网络</span>
+          <p><b>它不会打洞，也不做中转。</b> agent 就是一个监听在本机网卡上的服务：不在同一个网段时，你得自己准备一条能路由到这台 Mac 的路（VPN 之类）。反过来说，手机存的是一个具体地址 —— 换了网络环境要换对地址。</p>
+        </div>
+        <div class="limit reveal">
+          <span class="tag">手机</span>
+          <p><b>屏幕是手机的屏幕。</b> 手机多久熄屏、熄屏之后 Wi-Fi 断不断，是手机自己的设置决定的；断了意味着连接会掉一次，会话本身没事。</p>
+        </div>
+        <div class="limit reveal">
+          <span class="tag">历史</span>
+          <p><b>两处同时 resume 同一个会话，历史会分叉。</b> Claude Code 的 resume 只沿着一条 <code>parentUuid</code> 分支走，另一条在磁盘上还在，但不会再被显示。所以 app 在恢复一个正被占用的会话时会先警告。</p>
+        </div>
+        <div class="limit reveal">
+          <span class="tag">平台</span>
+          <p><b>Mac 端目前是 macOS。</b> 电脑那头是个菜单栏应用，手机这头是个 Flutter 应用（Android 已经在打 APK）。电脑上需要 tmux —— 会话活在里面。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ faq ============ -->
+  <section id="faq">
+    <div class="wrap">
+      <p class="kicker">常见问题</p>
+      <h2>别人最常问的几句</h2>
+
+      <details open>
+        <summary>我关掉手机，Claude 会停下来吗？</summary>
+        <div class="ans">
+          <p>不会。会话活在一个 tmux pane 里，手机只是一块屏幕。关 app、断网、熄屏，pane 都还在原处，重连回去接着看。</p>
+          <p>真正会结束会话的是：在电脑上退出或停止这个 app（agent 收到 SIGTERM 就把 tmux 会话清了，和你在终端里按 Ctrl-C 一样）—— 所以有会话在跑时它会先问一句。</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>旧 token 和新钥匙是什么关系？</summary>
+        <div class="ans">
+          <p>token 是这台机器的第一份凭据：一串 32 字节的随机值，只落在电脑上一个权限 0600 的文件里。老手机、老流程照常工作，它在名册里以「旧 token（本机文件）」出现。</p>
+          <p>新配对出来的是一把设备级的 <code>deviceKey</code>，电脑上只写它的 sha256。设备可以单独吊销 —— 而吊销旧 token 会<strong>删掉那个文件</strong>，并留下一块墓碑，重启 agent 也还是吊销状态。</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>Mac 提示「Apple 无法验证 ClaudePocket」怎么办？</summary>
+        <div class="ans">
+          <p>这个包是 ad-hoc 签名、还没有做 Apple 公证，所以从网上下载后会触发 Gatekeeper 拦截。把它拖进「应用程序」，然后任选一种：</p>
+          <p>① 双击一次、在弹窗里点取消 → 打开 <strong>系统设置 → 隐私与安全性</strong>，在「安全性」一栏点「仍要打开」→ 用 Touch ID / 密码验证 → 再确认一次。</p>
+          <p>② 打开终端，跑 <code>xattr -dr com.apple.quarantine /Applications/ClaudePocket.app</code>，然后再双击。</p>
+          <p><strong>macOS 15 起右键 → 打开不再能绕过这个拦截</strong>，必须走上面的「仍要打开」。另外 app 必须先复制到 <code>/Applications</code>，直接在只读的 dmg 里点也会失败。</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>不用装 Node 吗？</summary>
+        <div class="ans">
+          <p>不用。Mac 那个应用里自带运行时和全部逻辑，装上就是一个普通应用。只有你自己从项目里打这个包时才需要 Node ≥ 18。</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>手机上的二维码能截图发群里吗？</summary>
+        <div class="ans">
+          <p>不要。链接里带的是一张<strong>票</strong>：五分钟、一次 —— 但拿到它就能配一台设备。所以那个码只该出现在你自己看着的屏幕上，也不要贴进聊天记录。</p>
+          <p>顺带一提，启动日志里一个 token 也不打，链接也不进日志。</p>
+        </div>
+      </details>
+
+      <details>
+        <summary>它和「把终端投屏到手机」有什么不一样？</summary>
+        <div class="ans">
+          <p>投屏传的是像素，它传的是会话。所以手机这边可以做真正该在手机上做的事：窗口大小自己调、按键走软键盘工具条、文件能翻、会话能挑着 resume。</p>
+          <p>而且电脑那边不需要开着一个共享屏幕的窗口等你看 —— agent 是个后台服务，手机连不连，它都在那儿。</p>
+        </div>
+      </details>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div class="foot-grid">
+        <div>
+          <h5>ClaudePocket</h5>
+          <p style="margin:0; font-size:13.5px; max-width:34ch;">
+            手机接着电脑上的 Claude Code 会话。会话活在电脑上，手机只是一块屏幕 —— 走到哪儿都能接着看。
+          </p>
+        </div>
+        <div>
+          <h5>两个应用</h5>
+          <ul>
+            <li>ClaudePocket for macOS <span>— 菜单栏常驻</span></li>
+            <li>ClaudePocket for Android <span>— 扫码就能用</span></li>
+            <li>电脑上要装 <span>tmux 和 claude</span></li>
+          </ul>
+        </div>
+        <div>
+          <h5>在这底下</h5>
+          <ul>
+            <li>Flutter · Dart 3</li>
+            <li>Node · WebSocket</li>
+            <li>tmux · pty</li>
+            <li>xterm.js in WebView</li>
+            <li>SwiftUI</li>
+          </ul>
+        </div>
+      </div>
+      <div class="foot-bottom">
+        <span>把 Claude Code 装进兜里 —— 会话在电脑上活着。</span>
+      </div>
+    </div>
+  </footer>
+
+</main>
+
+<script>
+(function () {
+  "use strict";
+
+  /* One reading of the motion preference, up here because everything below
+     consults it: the auto-playing demo, the parallax, the count-up. */
+  var reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------- nav: shadow on scroll + active section ---------- */
+  var nav = document.getElementById("nav");
+  var onScroll = function () {
+    nav.classList.toggle("stuck", window.scrollY > 8);
+  };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  var navLinks = Array.prototype.slice.call(document.querySelectorAll(".nav-links a"));
+  var sections = navLinks
+    .map(function (a) { return document.querySelector(a.getAttribute("href")); })
+    .filter(Boolean);
+
+  if ("IntersectionObserver" in window) {
+    var spy = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        navLinks.forEach(function (a) {
+          a.classList.toggle("active", a.getAttribute("href") === "#" + e.target.id);
+        });
+        placePill();   // declared below; the block above only says which link won
+      });
+    }, { rootMargin: "-84px 0px -70% 0px", threshold: 0 });
+    sections.forEach(function (s) { spy.observe(s); });
+
+    /* reveal on scroll */
+    var revealer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e, i) {
+        if (!e.isIntersecting) return;
+        var el = e.target;
+        setTimeout(function () { el.classList.add("in"); }, (i % 4) * 70);
+        revealer.unobserve(el);
+      });
+    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.12 });
+    document.querySelectorAll(".reveal").forEach(function (el) { revealer.observe(el); });
+  } else {
+    document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("in"); });
+  }
+
+
+  /* ---------- scroll: reading progress, and the hero trailing the page ------ */
+  var progress = document.getElementById("navProgress");
+  var heroPhone = document.getElementById("heroPhone");
+  var glow = document.getElementById("glow");
+  var heroBox = document.querySelector(".hero");
+  var wideEnough = window.matchMedia ? window.matchMedia("(min-width: 941px)") : null;
+  var frameQueued = false;
+
+  function drawScroll() {
+    frameQueued = false;
+    var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+    var span = document.documentElement.scrollHeight - window.innerHeight;
+
+    if (progress) {
+      progress.style.transform = "scaleX(" + (span > 0 ? Math.min(1, y / span) : 0).toFixed(4) + ")";
+    }
+
+    /* The parallax: the phone and the glow trail the page by a fraction of it,
+       which is the whole effect. Capped at the hero's own height — past that
+       there is nothing left to give depth to, and a live transform would just
+       cost compositing for the rest of the page. Cleared (not just ignored) on
+       narrow screens and under reduced motion, so a resize back and forth
+       cannot leave one behind. */
+    var trail = (reduced || (wideEnough && !wideEnough.matches)) ? 0 : Math.min(y, heroBox ? heroBox.offsetHeight : 0);
+    if (heroPhone) heroPhone.style.transform = trail ? "translate3d(0," + (trail * 0.08).toFixed(2) + "px,0)" : "";
+    if (glow) glow.style.transform = trail ? "translate3d(0," + (trail * 0.03).toFixed(2) + "px,0)" : "";
+  }
+
+  function queueScroll() {
+    if (frameQueued) return;
+    frameQueued = true;
+    window.requestAnimationFrame(drawScroll);
+  }
+
+  window.addEventListener("scroll", queueScroll, { passive: true });
+  window.addEventListener("resize", queueScroll);
+  drawScroll();
+
+
+  /* ---------- the nav's highlight, as one block that travels ---------------- */
+  var navLinksEl = document.getElementById("navLinks");
+  var navPill = document.getElementById("navPill");
+
+  /** Puts the pill behind whichever link is active. Called from the nav spy
+   *  below, so it runs after the class landed — and hoisted, so the spy can
+   *  call it even though it is written before this. */
+  function placePill() {
+    if (!navLinksEl || !navPill) return;
+    var active = navLinksEl.querySelector("a.active");
+    if (!active) { navPill.style.opacity = "0"; return; }
+    var box = navLinksEl.getBoundingClientRect();
+    var r = active.getBoundingClientRect();
+    navPill.style.opacity = "1";
+    navPill.style.width = r.width + "px";
+    navPill.style.transform = "translateX(" + (r.left - box.left) + "px)";
+  }
+
+  if (navLinksEl && navPill) {
+    navLinksEl.classList.add("js-pill");
+    placePill();
+    window.addEventListener("resize", placePill);
+    window.addEventListener("load", placePill);
+  }
+
+
+  /* ---------- run something the first time an element is in view ----------- */
+  function onEnter(el, fn) {
+    if (!el) return;
+    if (!("IntersectionObserver" in window)) { fn(el); return; }
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        io.unobserve(e.target);
+        fn(e.target);
+      });
+    }, { rootMargin: "0px 0px -10% 0px", threshold: 0.12 });
+    io.observe(el);
+  }
+
+  /* the rule in front of every kicker sweeps open */
+  document.querySelectorAll(".kicker").forEach(function (k) {
+    onEnter(k, function (el) { el.classList.add("lit"); });
+  });
+
+  /* Section headings arrive a character at a time. Split only when script is
+     here to animate it: the characters start invisible, so an unsplit heading
+     is the only safe default. Text is preserved character for character, so
+     selecting it still copies the sentence. */
+  if (!reduced) {
+    document.querySelectorAll("section h2").forEach(function (h) {
+      onEnter(h, function (el) {
+        var text = el.textContent;
+        el.textContent = "";
+        for (var i = 0; i < text.length; i++) {
+          var ch = document.createElement("span");
+          ch.className = "ch";
+          ch.textContent = text.charAt(i);
+          ch.style.animationDelay = (i * 22) + "ms";
+          el.appendChild(ch);
+        }
+        el.classList.add("split");
+        el.querySelectorAll(".ch").forEach(function (c) { c.classList.add("in"); });
+      });
+    });
+  }
+
+  /* a number counts up on its way in; the real value is already in the markup */
+  document.querySelectorAll(".num").forEach(function (n) {
+    onEnter(n, function (el) {
+      var to = parseInt(el.getAttribute("data-to"), 10);
+      if (reduced || !isFinite(to)) return;
+      var started = null;
+      el.textContent = "0";
+      var step = function (ts) {
+        if (started === null) started = ts;
+        var p = Math.min(1, (ts - started) / 800);
+        el.textContent = p < 1 ? Math.round(to * (1 - Math.pow(1 - p, 3))) : to;
+        if (p < 1) window.requestAnimationFrame(step);
+      };
+      window.requestAnimationFrame(step);
+    });
+  });
+
+
+  /* ---------- the phone in 手机端: this one is meant to be poked -------------
+   *
+   * Two things the real app does, done here on a stand-in that costs nothing:
+   * the lamp column switches sessions, and the shortcut strip really sends.
+   * The lamp states are derived the way the app derives them — quiet < 5s is
+   * working, < 30s idle, past that waiting — and the sessions are left alone to
+   * cross those thresholds, so a visitor can watch a lamp go
+   * 运行中 → 空闲 → 等待输入 without being told the numbers twice.
+   */
+  var demoT = document.getElementById("demoTerm");
+  var demoLamps = document.getElementById("demoLamps");
+  var demoKeys = document.getElementById("demoKeys");
+  var demoTitle = document.getElementById("demoTitle");
+  var demoRead = document.getElementById("demoRead");
+
+  var LAMP_LABEL = { working: "运行中", idle: "空闲", waiting: "等待输入", error: "出错", offline: "离线" };
+
+  var SESSIONS = [
+    { id: "shop-api", quiet: 0, log: [
+      { k: "prompt", t: "把退款的测试补上" },
+      { k: "dim",  t: "⏺ Read src/refund/handler.ts" },
+      { k: "dim",  t: "⏺ Read src/refund/refund.ts" },
+      { k: "dim",  t: "⏺ Edit src/refund/handler.ts" },
+      { k: "text", t: "  补了三个用例：负数、超额、重复。" },
+      { k: "dim",  t: "⏺ Edit src/refund/refund.ts" },
+      { k: "text", t: "  边界那一段抽成了一个函数。" },
+      { k: "dim",  t: "⏺ Bash npm test -- refund" },
+      { k: "ok",   t: "  ✓ 32 passed" },
+      { k: "text", t: "✻ 还在跑，两条分支没覆盖…" }
+    ]},
+    { id: "docs-site", quiet: 8, log: [
+      { k: "prompt", t: "部署文档里的端口写错了" },
+      { k: "dim",  t: "⏺ Read docs/deploy.md" },
+      { k: "dim",  t: "⏺ Edit docs/deploy.md" },
+      { k: "text", t: "  端口 8080 改成 8081。" },
+      { k: "text", t: "  顺手把示例链接也换了。" },
+      { k: "ok",   t: "✓ 好了，等你下一句。" }
+    ]},
+    { id: "infra", quiet: 95, log: [
+      { k: "prompt", t: "staging 的机器换一批" },
+      { k: "dim",  t: "⏺ Bash terraform plan" },
+      { k: "text", t: "  要销毁 2 台、新建 2 台。" },
+      { k: "dim",  t: "⏺ 要用 terraform apply" },
+      { k: "warn", t: "  允许一次？(y/n)" }
+    ]}
+  ];
+
+  var activeSession = 0;
+
+  function lampStateOf(s) {
+    if (s.quiet < 5) return "working";
+    if (s.quiet < 30) return "idle";
+    return "waiting";
+  }
+
+  function setRead(text) {
+    if (demoRead) demoRead.textContent = text;
+  }
+
+  function renderLog(s, stagger) {
+    demoT.innerHTML = "";
+    s.log.forEach(function (item, i) {
+      var el = lineEl(item);
+      if (stagger) el.style.animationDelay = (i * 35) + "ms";
+      demoT.appendChild(el);
+    });
+    demoT.scrollTop = demoT.scrollHeight;
+  }
+
+  function renderLamps() {
+    demoLamps.innerHTML = "";
+    SESSIONS.forEach(function (s, i) {
+      var state = lampStateOf(s);
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "lamp s-" + state;
+      b.setAttribute("role", "tab");
+      b.setAttribute("aria-selected", String(i === activeSession));
+      if (i === activeSession) b.setAttribute("aria-current", "true");
+      b.setAttribute("data-session", s.id);
+      b.title = s.id + " · " + LAMP_LABEL[state];
+      b.setAttribute("aria-label", s.id + "，" + LAMP_LABEL[state]);
+      b.addEventListener("click", function () { selectSession(i); });
+      demoLamps.appendChild(b);
+    });
+  }
+
+  function selectSession(i) {
+    activeSession = i;
+    var s = SESSIONS[i];
+    demoTitle.textContent = s.id;
+    renderLog(s, true);
+    renderLamps();
+    setRead("切到 " + s.id + "（" + LAMP_LABEL[lampStateOf(s)] + "）");
+  }
+
+  var KEY_LINES = {
+    esc:   ["^[", "Esc 已发出：打断当前这一步", "warn"],
+    tab:   ["⇥", "补全 / 缩进 —— 软键盘打不出来", "text"],
+    ctrlc: ["^C", "已中断，claude 停在这一步", "warn"],
+    ctrld: ["^D", "EOF：真机上这个会话就结束了", "dim"],
+    left:  ["←", "光标左移一格", "text"],
+    right: ["→", "光标右移一格", "text"],
+    up:    ["↑", "上一条历史", "text"],
+    down:  ["↓", "下一条历史", "text"]
+  };
+
+  function pressKey(key) {
+    var s = SESSIONS[activeSession];
+    if (key === "ctrll") {
+      demoT.innerHTML = "";
+      demoT.appendChild(lineEl({ k: "dim", t: "清屏了 —— 画面的事，会话没事" }));
+      setRead("Ctrl+L 清屏");
+      return;
+    }
+    if (key === "enter") {
+      demoT.appendChild(lineEl({ k: "ok", t: "> " }));
+      s.quiet = 0;                 // input went in, so output is on its way
+      renderLamps();
+      setRead("Enter 发给了 " + s.id + "，等它回话");
+      demoT.scrollTop = demoT.scrollHeight;
+      return;
+    }
+    var line = KEY_LINES[key];
+    if (!line) return;
+    demoT.appendChild(lineEl({ k: "dim", t: line[0] }));
+    demoT.appendChild(lineEl({ k: line[2], t: line[1] }));
+    demoT.scrollTop = demoT.scrollHeight;
+    setRead(line[1]);
+  }
+
+  /* the output that keeps arriving in the busiest session, so the pulse is
+     never a thing a visitor has to take on faith */
+  var GROWTH = [
+    { k: "text", t: "✻ 跑第二轮，补上了那两条分支…" },
+    { k: "dim",  t: "⏺ Bash npm test -- refund" },
+    { k: "ok",   t: "  ✓ 34 passed" },
+    { k: "text", t: "✻ 覆盖率 96%，还差一个边界。" }
+  ];
+
+  var speaking = 0;
+  var seconds = 0;
+
+  function breathe() {
+    seconds++;
+    SESSIONS.forEach(function (s) { s.quiet++; });
+    if (seconds % 10 === 0) {
+      var s = SESSIONS[0];
+      s.quiet = 0;
+      s.log.push(GROWTH[speaking++ % GROWTH.length]);
+      if (activeSession === 0) {
+        demoT.appendChild(lineEl(s.log[s.log.length - 1]));
+        demoT.scrollTop = demoT.scrollHeight;
+      }
+    }
+    renderLamps();
+  }
+
+  if (demoT && demoLamps && demoKeys) {
+    demoKeys.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest("button[data-key]") : null;
+      if (b) pressKey(b.getAttribute("data-key"));
+    });
+    renderLamps();
+    if (!reduced) setInterval(breathe, 1000);
+  }
+
+
+  /* ---------- 配对: walk the two gates -------------------------------------- */
+  var pairMac = document.getElementById("pairMac");
+  var pairPhone = document.getElementById("pairPhone");
+  var pairMacHead = document.getElementById("pairMacHead");
+  var pairPhoneHead = document.getElementById("pairPhoneHead");
+
+  var CODE_TTL = 300;   // five minutes, like the ticket's own default
+  var ASK_TTL = 120;    // the question on the Mac only waits two
+
+  var FINGERPRINT =
+    '<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.6" stroke-linecap="round"><path d="M12 3.5c-2.2 0-4.1.9-5.5 2.4"/>' +
+    '<path d="M4.6 8.3A9 9 0 0 0 3.4 12c0 2 .6 3.8 1.7 5.3"/>' +
+    '<path d="M6.6 19.4A8.9 8.9 0 0 1 5.4 15c0-1.2.3-2.4.8-3.4"/>' +
+    '<path d="M12 6.6a5.4 5.4 0 0 1 5.4 5.4c0 1.6-.3 3.1-.9 4.4"/>' +
+    '<path d="M9.3 9.6A3.3 3.3 0 0 1 12 8.5c1.8 0 3.3 1.5 3.3 3.3 0 1.9-.4 3.6-1.2 5.1"/>' +
+    '<path d="M12 11.8c.4 0 .8.4.8.9 0 2-.4 3.9-1.2 5.5"/></svg>';
+
+  function clock(sec) {
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  if (pairMac && pairPhone && pairMacHead && pairPhoneHead) {
+    var pairState = "idle";
+    var left = 0;
+    var pairTimer = null;
+    var pairWhy = "";
+
+    /* A stand-in pattern, seeded so every visit draws the same one. Deliberately
+       dim: it should read as "a code goes here", not as something scannable. */
+    function drawCode(host) {
+      var N = 21;
+      var seed = 0x2f6b57;
+      host.style.gridTemplateColumns = "repeat(" + N + ", 1fr)";
+      host.innerHTML = "";
+      for (var i = 0; i < N * N; i++) {
+        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+        var cell = document.createElement("i");
+        if ((seed >> 17) & 1) cell.className = "on";
+        host.appendChild(cell);
+      }
+      // the finder squares, so it reads as a code rather than as noise
+      [[0, 0], [0, N - 7], [N - 7, 0]].forEach(function (p) {
+        for (var y = 0; y < 7; y++) {
+          for (var x = 0; x < 7; x++) {
+            var ring = x === 0 || y === 0 || x === 6 || y === 6;
+            var core = x >= 2 && x <= 4 && y >= 2 && y <= 4;
+            host.children[(p[0] + y) * N + p[1] + x].className = (ring || core) ? "on" : "";
+          }
+        }
+      });
+    }
+
+    function renderPair() {
+      var mac = "";
+      var phone = "";
+      var macHead = "未配对";
+      var phoneHead = "未配对";
+
+      if (pairState === "idle") {
+        mac = '<p>先过一次系统验证 —— 过了才出码。</p>' +
+              '<div class="panel-actions"><button class="btn primary" type="button" data-pair="start">配对</button></div>';
+        phone = "<p>还没连过这台电脑。</p>";
+      } else if (pairState === "checking") {
+        mac = '<div class="fp scan">' + FINGERPRINT + "</div>" +
+              "<p>确认你的身份…</p>" +
+              '<p class="fact-note">Touch ID，没有指纹的机器退回登录密码 —— 密码一直在系统手里，这个应用既不读也不存。</p>';
+        phone = "<p>还没连过这台电脑。</p>";
+      } else if (pairState === "code") {
+        mac = '<div class="qr" id="pairQr" aria-hidden="true"></div>' +
+              '<p class="qr-cap">示例图形 · 不是真的码</p>' +
+              '<p class="facts">还有 <b data-timer>' + clock(left) + "</b> · 等手机扫</p>" +
+              '<div class="panel-actions"><button class="btn" type="button" data-pair="scan">模拟手机扫一下</button></div>' +
+              '<p class="fact-note">拿到它就能配一台设备 —— 所以它只该出现在你自己看着的屏幕上。</p>';
+        // The Mac is still waiting on the scan here, so the phone side has to be
+        // pre-scan too — 「扫到了」 belongs one state later, not this one.
+        phone = "<p>等你扫屏幕上那个码。</p>";
+      } else if (pairState === "asking") {
+        macHead = "有一台设备要连上来";
+        mac = '<p class="facts"><b>允许这台设备？</b></p>' +
+              '<p class="facts">地址 <b>192.168.2.13</b><br>名字 <b>xiaomi-14</b><br>还剩 <b data-timer>' + clock(left) + "</b></p>" +
+              '<div class="panel-actions">' +
+              '<button class="btn primary" type="button" data-pair="allow">允许</button>' +
+              '<button class="btn" type="button" data-pair="deny">不允许</button></div>' +
+              '<p class="fact-note">地址是这台电脑自己看到的，名字是手机自己报的 —— 地址是事实，名字是对方说的。</p>';
+        phoneHead = "等电脑确认";
+        phone = "<p>扫到了，等电脑上按允许。</p>";
+      } else if (pairState === "paired") {
+        macHead = "已配上";
+        mac = '<p class="facts"><b>已配上。</b></p>' +
+              "<p>这台手机拿到一把只属于它的钥匙 —— 电脑上写下的只是它的 sha256，读到文件也给不出凭据。</p>" +
+              '<div class="panel-actions"><button class="btn" type="button" data-pair="start">再来一次</button></div>';
+        phoneHead = "已连接";
+        phone = '<span class="pill on"><span class="led"></span>已连接</span>' +
+                "<p>有自己的钥匙了，以后自己连上来，不用再扫。</p>";
+      } else if (pairState === "denied") {
+        macHead = "已拒绝";
+        mac = '<p class="facts"><b>已拒绝。</b></p>' +
+              "<p>这张票作废了 —— 同一张码再扫，也不会再出这个问句。</p>" +
+              '<div class="panel-actions"><button class="btn" type="button" data-pair="start">再来一次</button></div>';
+        phoneHead = "被拒绝";
+        phone = "<p>这台电脑拒绝了。</p>";
+      } else {   // expired
+        macHead = "已失效";
+        mac = '<p class="facts"><b>已失效 · 重新生成</b></p>' +
+              "<p>" + pairWhy + "</p>" +
+              '<div class="panel-actions"><button class="btn" type="button" data-pair="start">重新生成</button></div>';
+        phoneHead = "已过期";
+        phone = "<p>那张码已经过期了。</p>";
+      }
+
+      pairMac.innerHTML = mac;
+      pairPhone.innerHTML = phone;
+      pairMacHead.textContent = macHead;
+      pairPhoneHead.textContent = phoneHead;
+      var qr = pairMac.querySelector("#pairQr");
+      if (qr) drawCode(qr);
+    }
+
+    function stopPairTimer() {
+      if (pairTimer) { clearInterval(pairTimer); pairTimer = null; }
+    }
+
+    function runPairTimer() {
+      stopPairTimer();
+      pairTimer = setInterval(function () {
+        if (pairState !== "code" && pairState !== "asking") { stopPairTimer(); return; }
+        left--;
+        if (left <= 0) {
+          left = 0;
+          pairWhy = pairState === "code"
+            ? "五分钟到了，面板上那个码自己消失 —— 它只活在 agent 的内存里。"
+            : "两分钟没有回应，这张票也就作废了。";
+          pairState = "expired";
+          stopPairTimer();
+          renderPair();
+          return;
+        }
+        var t = pairMac.querySelector("[data-timer]");
+        if (t) t.textContent = clock(left);
+      }, 1000);
+    }
+
+    function pairAction(what) {
+      if (what === "start") {
+        stopPairTimer();
+        pairState = "checking";
+        renderPair();
+        // the system's own dialog, which we do not draw — hence the beat
+        setTimeout(function () {
+          if (pairState !== "checking") return;
+          pairState = "code";
+          left = CODE_TTL;
+          renderPair();
+          runPairTimer();
+        }, reduced ? 0 : 1200);
+      } else if (what === "scan" && pairState === "code") {
+        pairState = "asking";
+        left = ASK_TTL;
+        renderPair();
+        runPairTimer();
+      } else if (what === "allow" && pairState === "asking") {
+        pairState = "paired";
+        stopPairTimer();
+        renderPair();
+      } else if (what === "deny" && pairState === "asking") {
+        pairState = "denied";
+        stopPairTimer();
+        renderPair();
+      }
+    }
+
+    pairMac.addEventListener("click", function (e) {
+      var b = e.target.closest ? e.target.closest("[data-pair]") : null;
+      if (b) pairAction(b.getAttribute("data-pair"));
+    });
+  }
+
+
+  /* ---------- phone mock: a session that lives ---------- */
+  var term = document.getElementById("term");
+  var pill = document.getElementById("pill");
+  var pillText = document.getElementById("pillText");
+  if (!term || !pill) return;
+
+  var script = [
+    { k: "dim",  t: "tmux · cb_s_7f2a9c  ·  100x30" },
+    { k: "prompt", t: "claude", s: "  " , u: "~/code/shop-api" },
+    { k: "ok",   t: "> 登录的超时是不是定太短了" },
+    { k: "dim",  t: "⏺ Read src/auth/session.ts" },
+    { k: "text", t: "  探活 3 秒收不到就当成断了。" },
+    { k: "text", t: "  手机上丢一个包就会触发重连。" },
+    { k: "warn", t: "⚠ 这条探测会把活着的连接掐掉。" },
+    { k: "text", t: "  —— 地铁上一次丢包就断线。" },
+    { k: "ok",   t: "> 那就别把一次丢包当连接死了" },
+    { k: "dim",  t: "⏺ Edit src/auth/session.ts" },
+    { k: "text", t: "  改成连续 3 次超时才判死，" },
+    { k: "text", t: "  重连先建新的再换旧的。" },
+    { k: "ok",   t: "✓ 会话还在。手机熄屏也无所谓。" }
+  ];
+
+  var li = 0;
+
+  function lineEl(item) {
+    var d = document.createElement("div");
+    d.className = "ln";
+    var html = "";
+    if (item.k === "prompt") {
+      html = '<span class="p">❯</span> <span class="u">' + esc(item.t) + "</span>" +
+             '<span class="d">' + esc(item.s || "  ") + "</span>";
+    } else if (item.k === "dim") {
+      html = '<span class="d">' + esc(item.t) + "</span>";
+    } else if (item.k === "ok") {
+      html = '<span class="ok">' + esc(item.t) + "</span>";
+    } else if (item.k === "warn") {
+      html = '<span class="w">' + esc(item.t) + "</span>";
+    } else {
+      html = '<span class="t">' + esc(item.t) + "</span>";
+    }
+    d.innerHTML = html;
+    return d;
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function caret() {
+    var c = document.createElement("span");
+    c.className = "caret";
+    return c;
+  }
+
+  function typeLine(item, done) {
+    var d = document.createElement("div");
+    d.className = "ln";
+    var cls = item.k === "prompt" ? "u" : item.k === "warn" ? "w" : item.k === "dim" ? "d" : item.k === "ok" ? "ok" : "t";
+    var prefix = item.k === "prompt" ? '<span class="p">❯</span> ' : "";
+    var host = item.k === "prompt" ? '<span class="d">' + esc(item.s || "  ") + "</span>" : "";
+    var span = document.createElement("span");
+    span.className = cls;
+    d.innerHTML = prefix;
+    d.appendChild(span);
+    // insertAdjacentHTML, not appendChild: this is markup, and appendChild only
+    // takes a Node — passing a string threw, which killed the typewriter on its
+    // first prompt line and left the hero terminal empty.
+    if (host) d.insertAdjacentHTML("beforeend", host);
+    term.appendChild(d);
+    var full = item.t;
+    var i = 0;
+    var tick = setInterval(function () {
+      i += 2;
+      span.textContent = full.slice(0, i);
+      if (i >= full.length) {
+        clearInterval(tick);
+        span.textContent = full;
+        done();
+      }
+    }, 16);
+  }
+
+  function next() {
+    if (li >= script.length) {
+      setTimeout(function () {
+        term.innerHTML = "";
+        li = 0;
+        next();
+      }, 5200);
+      return;
+    }
+    var item = script[li++];
+    if (item.k === "prompt") {
+      typeLine(item, function () { setTimeout(next, 380); });
+    } else {
+      term.appendChild(lineEl(item));
+      setTimeout(next, item.k === "dim" ? 360 : 620);
+    }
+    term.scrollTop = term.scrollHeight;
+  }
+
+  function setPill(state) {
+    pill.classList.remove("on", "off");
+    if (state === "on") {
+      pill.classList.add("on");
+      pillText.textContent = "已连接";
+    } else if (state === "off") {
+      pill.classList.add("off");
+      pillText.textContent = "连接中…";
+    } else {
+      pillText.textContent = "连接中…";
+    }
+  }
+
+  if (reduced) {
+    script.forEach(function (item) { term.appendChild(lineEl(item)); });
+    setPill("on");
+    return;
+  }
+
+  /* 先"连接中"，再连上 —— 这一秒的等待本身就是这个项目要解决的问题 */
+  setPill("off");
+  setTimeout(function () {
+    setPill("on");
+    next();
+  }, 900);
+
+  /* 熄屏一次：状态掉回连接中，再回来 —— 会话不受影响 */
+  setInterval(function () {
+    if (document.hidden) return;
+    setPill("off");
+    setTimeout(function () { setPill("on"); }, 1400);
+  }, 26000);
+})();
+</script>
+</body>
+</html>

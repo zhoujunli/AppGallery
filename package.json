@@ -1,0 +1,11 @@
+{
+  "name": "appgallery",
+  "version": "1.0.0",
+  "private": true,
+  "description": "个人项目展示与安装包分发站",
+  "scripts": {
+    "test": "node --test",
+    "validate": "node scripts/validate-projects.mjs",
+    "versions": "node scripts/fetch-releases.mjs"
+  }
+}

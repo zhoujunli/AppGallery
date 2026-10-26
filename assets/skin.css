@@ -995,6 +995,13 @@ body[data-page="404"] .footer {
    落地页框架
    保留三块产品插画：.ui-dark 里的手机屏、终端、后台、配对面板一律不碰。
    ============================================================ */
+/* 落地页不加载 style.css；键盘焦点环在这里补上。两套皮肤共用主题里的
+   --focus（浅色深紫、深色亮紫；粗野深色是黄），不用浏览器默认的描边。 */
+body[data-page="landing"] :focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
 body[data-page="landing"] .nav-pill { display: none; }
 
 /* 落地页在窄屏会把链接整排收起，本地规则给每个 .theme-toggle 都挂了
